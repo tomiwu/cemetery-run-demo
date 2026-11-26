@@ -40,7 +40,10 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
+  type CiJob,
   CLAUDE_LIMIT,
+  EventDeduper,
+  jobGate,
   effortFor,
   limitWait,
   modelOfLabel,
@@ -442,10 +445,18 @@ const WEBHOOK_KEY = process.env.LOOP_WEBHOOK_KEY ?? "";
 const IDLE_POLL_MINUTES = Number(process.env.IDLE_POLL_MINUTES ?? "10");
 type LoopEvent = "pr_opened" | "ci_failed" | "loop_idle" | "loop_crashed" | "done";
 
+// One event per state change: a repeat of the same event with the same state key is not sent.
+const deduper = new EventDeduper();
+
 async function postEvent(
   event: LoopEvent,
   extra: { issue?: number; pr?: string } = {},
+  stateKey?: string,
 ): Promise<void> {
+  if (stateKey !== undefined && !deduper.shouldSend(event, stateKey)) {
+    console.log(`Event ${event} not sent again: same state (${stateKey}).`);
+    return;
+  }
   if (!WEBHOOK_URL || !WEBHOOK_KEY) {
     console.log(`Webhook values are missing. Event ${event} is not sent.`);
     return;
@@ -503,37 +514,28 @@ function headSha(url: string): string {
   ).stdout.trim();
 }
 
-// Read the jobs of every GitHub Actions run on the head commit. Each required job must
-// exist and have conclusion "success". "skipped" or a missing job blocks the merge.
+// Read the jobs of every GitHub Actions run on the head commit (gh --json, parsed in JS).
+// Each required job must exist and have conclusion "success" (rule in jobGate).
 function requiredJobsOk(sha: string): { ok: boolean; note: string } {
-  const ids = spawnSync(
-    "gh",
-    ["run", "list", "--commit", sha, "--json", "databaseId", "--jq", ".[].databaseId"],
-    { encoding: "utf8" },
-  )
-    .stdout.trim()
-    .split("\n")
-    .filter(Boolean);
-  const jobs = new Map<string, string>();
-  for (const id of ids) {
+  const runs = JSON.parse(
+    spawnSync("gh", ["run", "list", "--commit", sha, "--json", "databaseId"], {
+      encoding: "utf8",
+    }).stdout || "[]",
+  ) as { databaseId: number }[];
+  const jobs: CiJob[] = [];
+  for (const run of runs) {
     const out = spawnSync(
       "gh",
-      ["run", "view", id, "--json", "jobs", "--jq", '.jobs[] | "\(.name)\t\(.conclusion)"'],
+      ["run", "view", String(run.databaseId), "--json", "jobs"],
       { encoding: "utf8" },
     ).stdout;
-    for (const line of out.split("\n").filter(Boolean)) {
-      const [name, conclusion] = line.split("\t");
-      // A failure in any run of the same job name wins over a success.
-      if (jobs.get(name) !== "failure") jobs.set(name, conclusion);
+    try {
+      jobs.push(...(JSON.parse(out) as { jobs: CiJob[] }).jobs);
+    } catch {
+      /* a run without readable jobs counts as missing jobs */
     }
   }
-  const bad = REQUIRED_JOBS.filter((j) => jobs.get(j) !== "success");
-  return {
-    ok: bad.length === 0,
-    note: bad.length
-      ? `not success: ${bad.map((j) => `${j}=${jobs.get(j) ?? "missing"}`).join(", ")}`
-      : `all required jobs success: ${REQUIRED_JOBS.join(", ")}`,
-  };
+  return jobGate(jobs, REQUIRED_JOBS);
 }
 
 // Green CI: merge when AUTO_MERGE=1 and every required job succeeded. Returns true on a merge.
@@ -556,7 +558,7 @@ function mergeOrWait(url: string, issueNumber: number, comment: boolean): boolea
   spawnSync("gh", ["pr", "edit", url, "--add-label", "needs-validation"], {
     stdio: "inherit",
   });
-  if (comment)
+  if (comment && deduper.shouldSend("pr_comment", `${issueNumber}:${sha}:${gate.note}`))
     spawnSync(
       "gh",
       [
@@ -615,7 +617,11 @@ async function giveUp(issueNumber: number, text: string, pr?: string) {
   spawnSync("gh", ["issue", "comment", String(issueNumber), "--body", text], {
     stdio: "inherit",
   });
-  await postEvent("ci_failed", { issue: issueNumber, ...(pr ? { pr } : {}) });
+  await postEvent(
+    "ci_failed",
+    { issue: issueNumber, ...(pr ? { pr } : {}) },
+    `${issueNumber}:${pr ? headSha(pr) : "local"}`,
+  );
 }
 
 async function mainLoop(): Promise<void> {
@@ -623,7 +629,6 @@ async function mainLoop(): Promise<void> {
   console.log(`Review model: ${REVIEW_MODEL}`);
   console.log(`Base branch: ${BASE_BRANCH}`);
   console.log(`AUTO_MERGE=${AUTO_MERGE ? "1" : "0"}. Required jobs: ${REQUIRED_JOBS.join(", ")}. Image: ${IMAGE}.`);
-  let idlePosted = false;
   let iteration = 0;
   while (iteration < MAX_ITERATIONS) {
     sh("git", ["fetch", "origin", BASE_BRANCH]);
@@ -641,13 +646,9 @@ async function mainLoop(): Promise<void> {
         await postEvent("done");
         return;
       }
-      if (!idlePosted) {
-        console.log(
-          `No ready issue. Waiting PRs: ${[...waiting].join(",") || "none"}. Failed: ${[...failed].join(",") || "none"}.`,
-        );
-        await postEvent("loop_idle");
-        idlePosted = true;
-      }
+      const idleKey = `open=${openSandcastleCount()};waiting=${[...waiting].sort().join(",")};failed=${[...failed].sort().join(",")}`;
+      console.log(`No ready issue (${idleKey}).`);
+      await postEvent("loop_idle", {}, idleKey);
       // Tomasz can merge a PR or close an issue at any time. Forget the sets and look again.
       waiting.clear();
       idleStatus(`no ready issue; poll every ${IDLE_POLL_MINUTES} min`);
@@ -655,11 +656,6 @@ async function mainLoop(): Promise<void> {
       // failed issues stay failed until a restart of the loop.
       continue;
     }
-    idlePosted = false;
-    iteration++;
-    console.log(
-      `\n=== Iteration ${iteration}/${MAX_ITERATIONS}: issue #${issue.number} ${issue.title} ===\n`,
-    );
     currentIssue = issue.number;
 
     const existing = JSON.parse(
@@ -672,11 +668,15 @@ async function mainLoop(): Promise<void> {
     const args = { PROJECT, ISSUE: String(issue.number), BRANCH: branch };
 
     if (existing) {
-      console.log(`Resume the open PR ${existing.url}.`);
+      console.log(`Issue #${issue.number}: resume the open PR ${existing.url}.`);
       if (await waitCiWithFixes(existing.url, branch, issue.number)) {
         if (!mergeOrWait(existing.url, issue.number, true)) {
           waiting.add(issue.number);
-          await postEvent("ci_failed", { issue: issue.number, pr: existing.url });
+          await postEvent(
+            "ci_failed",
+            { issue: issue.number, pr: existing.url },
+            `${issue.number}:${headSha(existing.url)}`,
+          );
         }
       } else {
         await giveUp(
@@ -688,6 +688,10 @@ async function mainLoop(): Promise<void> {
       continue;
     }
 
+    iteration++;
+    console.log(
+      `\n=== Iteration ${iteration}/${MAX_ITERATIONS}: issue #${issue.number} ${issue.title} ===\n`,
+    );
     let passed = false;
     let commits = 0;
     const sandbox = await sandcastle.createSandbox({
@@ -766,7 +770,11 @@ async function mainLoop(): Promise<void> {
     if (await waitCiWithFixes(url, branch, issue.number)) {
       if (!mergeOrWait(url, issue.number, true)) {
         waiting.add(issue.number);
-        await postEvent("ci_failed", { issue: issue.number, pr: url });
+        await postEvent(
+          "ci_failed",
+          { issue: issue.number, pr: url },
+          `${issue.number}:${headSha(url)}`,
+        );
       }
     } else {
       await giveUp(
