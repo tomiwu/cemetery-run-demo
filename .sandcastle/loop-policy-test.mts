@@ -3,7 +3,9 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  EventDeduper,
   agentBeforePhase,
+  jobGate,
   effortFor,
   isFormatOnlyFailure,
   limitWait,
@@ -187,6 +189,37 @@ await sleepUntil(t0 + 120, 20);
 check("sleepUntil: wall-clock deadline reached", Date.now() - t0 >= 120);
 await sleepUntil(t0 - 1000);
 check("sleepUntil: past deadline returns at once", Date.now() - t0 < 1000);
+
+
+// Merge gate: parse jobs from `gh run view --json jobs` (no jq string escapes).
+const REQ = ["format", "lint", "typecheck", "test", "build", "e2e"];
+const ghJson = JSON.stringify({
+  jobs: REQ.map((name) => ({ name, conclusion: "success", status: "completed" })),
+});
+const parsed = (JSON.parse(ghJson) as { jobs: { name: string; conclusion: string }[] }).jobs;
+check("gate: all six success -> ok", jobGate(parsed, REQ).ok);
+check(
+  "gate: one failure in a second run wins",
+  !jobGate([...parsed, { name: "e2e", conclusion: "failure" }], REQ).ok,
+);
+check(
+  "gate: a missing job blocks",
+  jobGate(parsed.filter((j) => j.name !== "build"), REQ).note.includes("build=missing"),
+);
+check(
+  "gate: skipped or pending blocks",
+  !jobGate([...parsed.filter((j) => j.name !== "test"), { name: "test", conclusion: "skipped" }], REQ).ok &&
+    !jobGate([...parsed.filter((j) => j.name !== "lint"), { name: "lint", conclusion: null }], REQ).ok,
+);
+const dd = new EventDeduper();
+check(
+  "events: one ci_failed per state, again after a change",
+  dd.shouldSend("ci_failed", "14:abc") &&
+    !dd.shouldSend("ci_failed", "14:abc") &&
+    dd.shouldSend("ci_failed", "14:def") &&
+    dd.shouldSend("loop_idle", "w=2") &&
+    !dd.shouldSend("loop_idle", "w=2"),
+);
 
 if (fails) {
   console.log(`\n${fails} loop-policy test(s) failed.`);

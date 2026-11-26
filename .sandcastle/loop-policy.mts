@@ -250,3 +250,42 @@ export function writeStatus(file: string, status: LoopStatus): void {
 
 export const modelOfLabel = (label: string) =>
   label.match(/\(([^)]+)\)/)?.[1] ?? label;
+
+// ---------------------------------------------------------------------------
+// Merge gate (cemetery-run-demo, 2026-11-26). Input: the "jobs" arrays of
+// `gh run view <id> --json jobs` for every run on the PR head commit.
+// Each required job must exist and have conclusion "success". A failure of a
+// job with the same name in any run wins. "skipped" or missing blocks a merge.
+// ---------------------------------------------------------------------------
+export interface CiJob {
+  name: string;
+  conclusion: string | null;
+}
+export function jobGate(
+  jobs: CiJob[],
+  required: string[],
+): { ok: boolean; note: string } {
+  const seen = new Map<string, string>();
+  for (const j of jobs) {
+    const c = j.conclusion || "pending";
+    if (seen.get(j.name) !== "failure") seen.set(j.name, c);
+  }
+  const bad = required.filter((r) => seen.get(r) !== "success");
+  return {
+    ok: bad.length === 0,
+    note: bad.length
+      ? `not success: ${bad.map((r) => `${r}=${seen.get(r) ?? "missing"}`).join(", ")}`
+      : `all required jobs success: ${required.join(", ")}`,
+  };
+}
+
+// One webhook event per state change. send() returns true only when the state
+// key of the event differs from the last key sent for that event name.
+export class EventDeduper {
+  private last = new Map<string, string>();
+  shouldSend(event: string, stateKey: string): boolean {
+    if (this.last.get(event) === stateKey) return false;
+    this.last.set(event, stateKey);
+    return true;
+  }
+}
