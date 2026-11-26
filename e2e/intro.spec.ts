@@ -18,9 +18,10 @@ const state = (page: Page): Promise<string | undefined> =>
 
 // Software WebGL is slow. Hold the intro at a fixed point, so a slow shot or tap cannot race it.
 async function freezeIntroAt(page: Page, value: number): Promise<void> {
+  // Freeze at once: a slow first frame must not run the intro to its end.
   await expect
-    .poll(() => progress(page), { timeout: 30_000 })
-    .toBeGreaterThan(0);
+    .poll(() => page.evaluate(() => window.__game !== undefined))
+    .toBe(true);
   await page.evaluate((v) => window.__game?.freezeIntro(v), value);
   await expect.poll(() => progress(page), { timeout: 30_000 }).toBe(value);
 }
