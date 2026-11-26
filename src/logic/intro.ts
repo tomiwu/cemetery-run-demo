@@ -11,10 +11,7 @@ export interface IntroKeyframe {
   camera: { x: number; y: number; z: number };
 }
 
-export interface IntroSample {
-  hearse: { x: number; z: number; heading: number };
-  camera: { x: number; y: number; z: number };
-}
+export type IntroSample = Omit<IntroKeyframe, "t">;
 
 /** Keyframes as pure data. The hearse drives along the road and in through the gate. */
 export const INTRO_KEYFRAMES: readonly IntroKeyframe[] = [
