@@ -52,7 +52,14 @@ intro.loaded
     sceneLoaded = true;
   });
 
-if (new URLSearchParams(window.location.search).get("test") === "1") {
+const query = new URLSearchParams(window.location.search);
+if (query.get("test") === "1") {
+  // `?test=1&hold=<0..1>` holds the intro at that progress from the first frame,
+  // so a slow software-WebGL test run cannot miss the intro state. Players never send it.
+  const hold = Number(query.get("hold"));
+  if (query.has("hold") && hold >= 0 && hold <= 1) {
+    frozenProgress = hold;
+  }
   window.__game = {
     state: () => state,
     introProgress: () => progress,

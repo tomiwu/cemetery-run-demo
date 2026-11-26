@@ -34,7 +34,7 @@ test("the intro and the start screen show, then a tap starts the game", async ({
 }, testInfo) => {
   test.setTimeout(90_000);
   const problems = problemsOf(page);
-  await page.goto("?test=1");
+  await page.goto("?test=1&hold=0.55");
 
   await expect(page.getByText("Tap to skip")).toBeVisible();
   await freezeIntroAt(page, 0.55);
@@ -66,7 +66,7 @@ test("a tap during the intro gives the state ready in less than 1 s", async ({
   page,
 }) => {
   const problems = problemsOf(page);
-  await page.goto("?test=1");
+  await page.goto("?test=1&hold=0.4");
 
   await freezeIntroAt(page, 0.4);
   expect(await state(page)).toBe("intro");
