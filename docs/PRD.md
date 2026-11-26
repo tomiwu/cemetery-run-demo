@@ -28,7 +28,9 @@ The game is a demo. It shows no names: no company, no town, no person, no phone 
 | D13 | Assets | CC0 low-poly packs (Kenney Graveyard Kit, Kenney Impact Sounds) plus shapes made in code. The hearse is made in code. Each third-party file is listed in `docs/ASSETS.md`. |
 | D14 | Phone target | 60 fps on a mid-range 2021 phone. Portrait first; landscape works. The game lowers the pixel ratio and the shadow quality when the frame rate drops. |
 | D15 | Hidden | `<meta name="robots" content="noindex, nofollow">` and `robots.txt` with `Disallow: /`. |
-| D16 | Camera | Above and behind the hearse, tilted (3/4 chase view). |
+| D16 | Camera | Above and behind the hearse, tilted (3/4 chase view). The camera follows the hearse position but keeps a fixed world direction (it does not turn with the hearse). Thus a drag up on the screen always drives the hearse away from the camera, and a drag right always drives it to the right. |
+| D17 | Pop sound | The cartoon pop is made in code with Web Audio (no file). Reason: Kenney sounds are OGG, and older iPhone Safari does not play OGG. |
+| D18 | Assets in the repo | Third-party files come from the release `asset-sources-v1` of this repo (the owner bot downloaded the originals on 2026-11-26). `scripts/fetch-assets.sh` downloads them and checks SHA-256. The fetched files are committed in `public/assets/`. |
 | PS1 | Repo | `tomiwu/cemetery-run-demo`. |
 | PS2 | Visibility | Public, MIT licence. Demo code is visible; Tomasz accepted this. |
 | PS3 | Token | Fine-grained PAT for this repo only (Contents, Issues, Pull requests, Workflows, Administration: read/write). Stored only on the box in `/workspace/cemetery-run-demo-secrets/` and `.sandcastle/.env` (git-ignored). |
