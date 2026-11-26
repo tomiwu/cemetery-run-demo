@@ -1,7 +1,7 @@
 export type SessionState = "intro" | "ready" | "playing" | "ended";
 
 export type SessionEvent =
-  "introDone" | "tap" | "timeUp" | "candlesOut" | "restart";
+  "introDone" | "skip" | "tap" | "timeUp" | "candlesOut" | "restart";
 
 export function initialState(): SessionState {
   return "intro";
@@ -11,7 +11,7 @@ export function initialState(): SessionState {
 export function next(state: SessionState, event: SessionEvent): SessionState {
   switch (state) {
     case "intro":
-      return event === "introDone" || event === "tap" ? "ready" : state;
+      return event === "introDone" || event === "skip" ? "ready" : state;
     case "ready":
       return event === "tap" ? "playing" : state;
     case "playing":
