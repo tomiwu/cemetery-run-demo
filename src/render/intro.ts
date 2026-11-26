@@ -103,15 +103,19 @@ const PLACEMENTS: readonly Placement[] = [
 
 const LIGHTPOST = { x: -4.2, z: -1.5, scale: 3.6 } as const;
 
-function skyDome(): Mesh {
+export function skyDome(
+  low: Color = SKY_LOW,
+  high: Color = SKY_HIGH,
+  spread = 0.55,
+): Mesh {
   const geometry = new SphereGeometry(200, 20, 12);
   const position = geometry.getAttribute("position");
   const colors: number[] = [];
   const color = new Color();
   for (let i = 0; i < position.count; i += 1) {
     const height = Math.max(0, position.getY(i) / 200);
-    const k = Math.min(1, Math.pow(height / 0.55, 0.7));
-    color.copy(SKY_LOW).lerp(SKY_HIGH, k);
+    const k = Math.min(1, Math.pow(height / spread, 0.7));
+    color.copy(low).lerp(high, k);
     colors.push(color.r, color.g, color.b);
   }
   geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
