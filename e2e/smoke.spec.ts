@@ -13,7 +13,7 @@ test("smoke: page loads, hidden from search, canvas draws", async ({
     problems.push(`page: ${error.message}`);
   });
 
-  await page.goto("?test=1");
+  await page.goto("?test=1&hold=0.5");
 
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
     "content",
@@ -26,8 +26,16 @@ test("smoke: page loads, hidden from search, canvas draws", async ({
   expect(box?.width ?? 0).toBeGreaterThan(0);
   expect(box?.height ?? 0).toBeGreaterThan(0);
 
+  // `hold=0.5` holds the intro from the first frame (slow software WebGL in CI).
   await expect
-    .poll(() => page.evaluate(() => window.__game?.state()))
+    .poll(() => page.evaluate(() => window.__game !== undefined), {
+      timeout: 30_000,
+    })
+    .toBe(true);
+  await expect
+    .poll(() => page.evaluate(() => window.__game?.state()), {
+      timeout: 30_000,
+    })
     .toBe("intro");
 
   await page.screenshot({

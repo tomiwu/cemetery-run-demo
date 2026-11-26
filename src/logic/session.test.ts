@@ -9,6 +9,7 @@ import {
 const ALL_STATES: SessionState[] = ["intro", "ready", "playing", "ended"];
 const ALL_EVENTS: SessionEvent[] = [
   "introDone",
+  "skip",
   "tap",
   "timeUp",
   "candlesOut",
@@ -25,7 +26,11 @@ describe("session state machine", () => {
   });
 
   it("skips the intro with a tap", () => {
-    expect(next("intro", "tap")).toBe("ready");
+    expect(next("intro", "skip")).toBe("ready");
+  });
+
+  it("ignores a tap during the intro", () => {
+    expect(next("intro", "tap")).toBe("intro");
   });
 
   it("goes ready -> playing with a tap", () => {
@@ -47,7 +52,7 @@ describe("session state machine", () => {
   it("ignores events that do not apply", () => {
     const valid = new Set([
       "intro:introDone",
-      "intro:tap",
+      "intro:skip",
       "ready:tap",
       "playing:timeUp",
       "playing:candlesOut",

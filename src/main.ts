@@ -1,18 +1,10 @@
-import {
-  AmbientLight,
-  Color,
-  DirectionalLight,
-  DodecahedronGeometry,
-  Mesh,
-  MeshStandardMaterial,
-  PerspectiveCamera,
-  Scene,
-  WebGLRenderer,
-} from "three";
-import { STRINGS } from "./strings";
-import { initialState } from "./logic/session";
-
-const BACKGROUND = "#161513";
+import "./styles.css";
+import { WebGLRenderer } from "three";
+import { CONFIG } from "./config";
+import { introProgress } from "./logic/intro";
+import { initialState, next, type SessionEvent } from "./logic/session";
+import { createIntroScene } from "./render/intro";
+import { createScreens } from "./ui/screens";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game");
 const ui = document.querySelector<HTMLElement>("#ui");
@@ -20,47 +12,77 @@ if (!canvas || !ui) {
   throw new Error("Page host elements are missing.");
 }
 
-const title = document.createElement("h1");
-title.textContent = STRINGS.title;
-ui.append(title);
-
 const renderer = new WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-const scene = new Scene();
-scene.background = new Color(BACKGROUND);
-
-const camera = new PerspectiveCamera(50, 1, 0.1, 100);
-camera.position.set(0, 1.5, 5);
-
-scene.add(new AmbientLight(0xffffff, 0.6));
-const light = new DirectionalLight(0xffe2b0, 2);
-light.position.set(3, 5, 4);
-scene.add(light);
-
-const placeholder = new Mesh(
-  new DodecahedronGeometry(1.2),
-  new MeshStandardMaterial({ color: 0xc9b99a, flatShading: true }),
-);
-scene.add(placeholder);
+const intro = createIntroScene(import.meta.env.BASE_URL);
 
 function resize(): void {
   const width = window.innerWidth;
   const height = window.innerHeight;
   renderer.setSize(width, height, false);
-  camera.aspect = width / Math.max(height, 1);
-  camera.updateProjectionMatrix();
+  intro.resize(width, height);
 }
 window.addEventListener("resize", resize);
 resize();
 
-const state = initialState();
-if (new URLSearchParams(window.location.search).get("test") === "1") {
-  window.__game = { state: () => state };
+let state = initialState();
+function send(event: SessionEvent): void {
+  const target = next(state, event);
+  if (target !== state) {
+    state = target;
+    screens.show(state);
+  }
+}
+const screens = createScreens(ui, send);
+screens.show(state);
+
+// The intro clock starts when the models are in the scene.
+let introElapsed = 0;
+let lastTime: number | null = null;
+let progress = 0;
+let sceneLoaded = false;
+let frozenProgress: number | null = null;
+intro.loaded
+  .then(() => {
+    sceneLoaded = true;
+  })
+  .catch((error: unknown) => {
+    console.error("Cannot load the scene.", error);
+    sceneLoaded = true;
+  });
+
+const query = new URLSearchParams(window.location.search);
+if (query.get("test") === "1") {
+  // `?test=1&hold=<0..1>` holds the intro at that progress from the first frame,
+  // so a slow software-WebGL test run cannot miss the intro state. Players never send it.
+  const hold = Number(query.get("hold"));
+  if (query.has("hold") && hold >= 0 && hold <= 1) {
+    frozenProgress = hold;
+  }
+  window.__game = {
+    state: () => state,
+    introProgress: () => progress,
+    freezeIntro: (value) => {
+      frozenProgress = value;
+    },
+  };
 }
 
 renderer.setAnimationLoop((time: number) => {
-  placeholder.rotation.y = time / 1000;
-  placeholder.rotation.x = time / 2300;
-  renderer.render(scene, camera);
+  if (state === "intro") {
+    if (sceneLoaded) {
+      const step = lastTime === null ? 0 : (time - lastTime) / 1000;
+      lastTime = time;
+      introElapsed += Math.min(Math.max(step, 0), CONFIG.introMaxStepSeconds);
+      progress = frozenProgress ?? introProgress(introElapsed);
+      if (progress >= 1) {
+        send("introDone");
+      }
+    }
+  } else {
+    progress = 1;
+  }
+  intro.update(progress);
+  renderer.render(intro.scene, intro.camera);
 });
