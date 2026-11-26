@@ -29,7 +29,8 @@ The host writes the full issue (body and comments) to `.sandcastle/context/issue
 - NO names anywhere: no company, no town, no person, no phone number, no address. Do not link any other site.
 - All player text is English and lives only in `src/strings.ts`. All gameplay numbers live only in `src/config.ts`.
 - Pure game logic (`src/logic/`) has no Three.js and no DOM import. The render code (`src/render/`) reads the logic state.
-- No gore and no blood. A hit zombie pops into dry leaves or dust.
+- No gore and no blood.
+- Look: every step must look more like `docs/VISUAL_REFERENCE.md` (concept frames in `docs/ref/`, target images in `docs/targets/`). Open the target image(s) that the issue names and compare your e2e screenshot with them before you commit. A hit zombie pops into dry leaves or dust.
 - Third-party files come only from the URLs in the issue. Record each file in `docs/ASSETS.md` (source URL, author, licence).
 - Tests do not use the network. Use fakes and invented data. No secrets and no personal data anywhere.
 - WebGL in headless Chromium: start Playwright Chromium with `--use-angle=swiftshader` and `--enable-unsafe-swiftshader`.
