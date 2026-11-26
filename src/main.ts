@@ -1,5 +1,6 @@
 import "./styles.css";
 import { WebGLRenderer } from "three";
+import { CONFIG } from "./config";
 import { introProgress } from "./logic/intro";
 import { initialState, next, type SessionEvent } from "./logic/session";
 import { createIntroScene } from "./render/intro";
@@ -37,7 +38,8 @@ const screens = createScreens(ui, send);
 screens.show(state);
 
 // The intro clock starts when the models are in the scene.
-let introStart: number | null = null;
+let introElapsed = 0;
+let lastTime: number | null = null;
 let progress = 0;
 let sceneLoaded = false;
 let frozenProgress: number | null = null;
@@ -63,8 +65,10 @@ if (new URLSearchParams(window.location.search).get("test") === "1") {
 renderer.setAnimationLoop((time: number) => {
   if (state === "intro") {
     if (sceneLoaded) {
-      introStart ??= time;
-      progress = frozenProgress ?? introProgress((time - introStart) / 1000);
+      const step = lastTime === null ? 0 : (time - lastTime) / 1000;
+      lastTime = time;
+      introElapsed += Math.min(Math.max(step, 0), CONFIG.introMaxStepSeconds);
+      progress = frozenProgress ?? introProgress(introElapsed);
       if (progress >= 1) {
         send("introDone");
       }
