@@ -13,8 +13,7 @@ export default defineConfig({
   forbidOnly: isCI,
   reporter: [["list"], ["html", { open: "never" }]],
   webServer: {
-    command:
-      "npm run build && npm run preview -- --port 4173 --strictPort --bypass-lock",
+    command: "npm run build && npm run preview -- --port 4173 --strictPort",
     url: URL,
     reuseExistingServer: !isCI,
     timeout: 120_000,
