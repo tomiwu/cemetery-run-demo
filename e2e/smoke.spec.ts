@@ -28,11 +28,15 @@ test("smoke: page loads, hidden from search, canvas draws", async ({
 
   // Software WebGL is slow. Hold the intro, so it cannot end before the check.
   await expect
-    .poll(() => page.evaluate(() => window.__game !== undefined))
+    .poll(() => page.evaluate(() => window.__game !== undefined), {
+      timeout: 30_000,
+    })
     .toBe(true);
   await page.evaluate(() => window.__game?.freezeIntro(0.5));
   await expect
-    .poll(() => page.evaluate(() => window.__game?.state()))
+    .poll(() => page.evaluate(() => window.__game?.state()), {
+      timeout: 30_000,
+    })
     .toBe("intro");
 
   await page.screenshot({
