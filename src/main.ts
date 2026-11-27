@@ -24,7 +24,7 @@ if (!canvas || !ui) {
 const renderer = new WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-const intro = createIntroScene(import.meta.env.BASE_URL);
+const intro = createIntroScene();
 const game = createGameScene(renderer, import.meta.env.BASE_URL);
 const input = createInput(CONFIG.joystick);
 createJoystick(canvas, input);

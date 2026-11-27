@@ -13,32 +13,32 @@ export interface IntroKeyframe {
 
 export type IntroSample = Omit<IntroKeyframe, "t">;
 
-/** Keyframes as pure data. The hearse drives along the road and in through the gate. */
+/** Keyframes as pure data. The hearse drives up the road to the cemetery gate and turns to face the camera. */
 export const INTRO_KEYFRAMES: readonly IntroKeyframe[] = [
   {
     t: 0,
     hearse: { x: 0, z: -46, heading: 0 },
-    camera: { x: 3, y: 2, z: -56 },
+    camera: { x: -4.5, y: 7, z: -55.5 },
   },
   {
     t: 0.3,
-    hearse: { x: 0, z: -28, heading: 0 },
-    camera: { x: 6.5, y: 2.4, z: -34 },
+    hearse: { x: 0, z: -30, heading: 0 },
+    camera: { x: -4.5, y: 6.6, z: -39.5 },
   },
   {
-    t: 0.6,
-    hearse: { x: 0, z: -9, heading: 0 },
-    camera: { x: 7.5, y: 3, z: -5 },
+    t: 0.7,
+    hearse: { x: 0, z: -4, heading: 0 },
+    camera: { x: -4.8, y: 5.8, z: -13 },
   },
   {
     t: 0.8,
-    hearse: { x: 0, z: 3, heading: 0 },
-    camera: { x: 3, y: 6, z: -9 },
+    hearse: { x: 0, z: 4, heading: 0 },
+    camera: { x: -3.5, y: 4.6, z: -4.5 },
   },
   {
     t: 1,
-    hearse: { x: 0, z: 10, heading: 0 },
-    camera: { x: 0, y: 8, z: -7 },
+    hearse: { x: 1, z: 10.5, heading: -2.3 },
+    camera: { x: -1.25, y: 2.9, z: 3.75 },
   },
 ];
 
