@@ -8,7 +8,7 @@ import {
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
-export { seededRandom as seeded } from "../logic/random";
+export { createRandom as seeded } from "../logic/random";
 
 export interface PartOptions {
   x?: number;

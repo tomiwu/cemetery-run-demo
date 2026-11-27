@@ -15,7 +15,7 @@ import {
 } from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { seededRandom } from "../logic/random";
+import { createRandom } from "../logic/random";
 import type { CemeteryMap } from "../logic/map";
 import { CONFIG } from "../config";
 import { PALETTE } from "./palette";
@@ -316,7 +316,7 @@ function instances(map: CemeteryMap): Instance[] {
   });
 
   // Trees outside the walls, for the dark backdrop. The hearse cannot reach them.
-  const random = seededRandom(CONFIG.map.seed + 100);
+  const random = createRandom(CONFIG.map.seed + 100);
   const perimeter = 2 * (map.bounds.maxX * 2 + halfLength * 2);
   for (let i = 0; i < 46; i += 1) {
     const t = ((i + random() * 0.8) / 46) * perimeter;

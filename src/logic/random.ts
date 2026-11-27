@@ -1,5 +1,5 @@
 /** A small seeded random function (mulberry32). Same seed, same numbers. */
-export function seededRandom(seed: number): () => number {
+export function createRandom(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
     state = (state + 0x6d2b79f5) >>> 0;

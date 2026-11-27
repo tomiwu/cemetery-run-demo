@@ -19,6 +19,8 @@ import type { CemeteryMap } from "../logic/map";
 import { buildHearse } from "./hearse";
 import { skyDome } from "./intro";
 import { buildMapScene } from "./map";
+import { createZombieLayer } from "./zombies";
+import type { Zombie } from "../logic/zombies";
 import { PALETTE } from "./palette";
 
 /** Night colours. The ground is the surface colour of the palette (PRD section 6). */
@@ -39,7 +41,11 @@ export interface GameScene {
   /** Resolves when the models are in the scene. */
   loaded: Promise<void>;
   /** Put the hearse and the light where the state says, and move the camera. */
-  update: (hearse: HearseState, frameSeconds: number) => void;
+  update: (
+    hearse: HearseState,
+    zombies: readonly Zombie[],
+    frameSeconds: number,
+  ) => void;
   /** Put the camera at once at its place for this state (no smooth follow). */
   snap: (hearse: HearseState) => void;
   resize: (width: number, height: number) => void;
@@ -76,6 +82,9 @@ export function createGameScene(
 
   const mapScene = buildMapScene(map, baseUrl);
   scene.add(mapScene.group);
+
+  const zombieLayer = createZombieLayer(baseUrl);
+  scene.add(zombieLayer.group);
 
   scene.add(new AmbientLight(0x8a8590, 2));
   scene.add(new HemisphereLight(0x9a93a0, 0x4a3f33, 2));
@@ -127,8 +136,13 @@ export function createGameScene(
     sky.position.copy(camera.position);
   }
 
-  function update(state: HearseState, frameSeconds: number): void {
+  function update(
+    state: HearseState,
+    zombies: readonly Zombie[],
+    frameSeconds: number,
+  ): void {
     placeHearse(state, frameSeconds);
+    zombieLayer.update(zombies, frameSeconds);
     wanted.copy(focus).add(offset);
     const k = 1 - Math.exp(-CONFIG.camera.follow * Math.max(0, frameSeconds));
     camera.position.lerp(wanted, k);
@@ -156,5 +170,8 @@ export function createGameScene(
   }
 
   snap({ ...map.hearseStart, speed: 0 });
-  return { scene, camera, loaded: mapScene.loaded, update, snap, resize };
+  const loaded = Promise.all([mapScene.loaded, zombieLayer.loaded]).then(
+    () => undefined,
+  );
+  return { scene, camera, loaded, update, snap, resize };
 }
