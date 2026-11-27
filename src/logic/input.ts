@@ -101,10 +101,10 @@ export function createInput(config: JoystickConfig): InputState {
       }
     },
     keyDown(key) {
-      keys.add(key);
+      keys.add(key.toLowerCase());
     },
     keyUp(key) {
-      keys.delete(key);
+      keys.delete(key.toLowerCase());
     },
     reset() {
       keys.clear();

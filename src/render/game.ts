@@ -5,12 +5,16 @@ import {
   Fog,
   Group,
   HemisphereLight,
+  InstancedMesh,
+  Matrix4,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   PCFShadowMap,
   PerspectiveCamera,
   PlaneGeometry,
   Scene,
+  SphereGeometry,
   SpotLight,
   Vector3,
   type WebGLRenderer,
@@ -30,6 +34,7 @@ const SKY_LOW = "#b9804f";
 const SKY_HIGH = "#3c3f4e";
 const MOON_COLOR = 0xa9b4d6;
 const HEADLIGHT_COLOR = 0xffd58a;
+const CANDLE_COLOR = 0xf2b45a;
 
 const LOOK_HEIGHT = 1.1;
 const SHADOW_SIZE = 16;
@@ -43,7 +48,7 @@ interface Prop {
   turn?: number;
 }
 
-const STONE_SCALE = 3;
+const STONE_SCALE = 2;
 const PINE_SCALE = 4.3;
 const STONES = [
   "gravestone-round",
@@ -191,7 +196,23 @@ export function createGameScene(
     holder.rotation.y = prop.turn ?? 0;
     scene.add(holder);
   }
-  const loaded = Promise.all(props().map(place)).then(() => undefined);
+  const items = props();
+  const loaded = Promise.all(items.map(place)).then(() => undefined);
+
+  // Many small warm candle points beside the graves (a key part of the mood).
+  const stones = items.filter((prop) => !prop.model.startsWith("pine"));
+  const candles = new InstancedMesh(
+    new SphereGeometry(0.13, 8, 6),
+    new MeshBasicMaterial({ color: CANDLE_COLOR }),
+    stones.length,
+  );
+  const candlePlace = new Matrix4();
+  stones.forEach((stone, i) => {
+    const side = stone.x < 0 ? 1 : -1;
+    candlePlace.setPosition(stone.x + side * 0.9, 0.35, stone.z + 0.6);
+    candles.setMatrixAt(i, candlePlace);
+  });
+  scene.add(candles);
 
   const offset = new Vector3(
     CONFIG.camera.offset.x,

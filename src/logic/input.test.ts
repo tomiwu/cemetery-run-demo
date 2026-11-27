@@ -147,6 +147,14 @@ describe("keys", () => {
     expect(input.vector()).toEqual({ x: 0, y: 0 });
   });
 
+  it("release a key that went down in another letter case", () => {
+    const input = ready();
+    input.keyDown("W");
+    expect(input.vector()).toEqual({ x: 0, y: 1 });
+    input.keyUp("w");
+    expect(input.vector()).toEqual({ x: 0, y: 0 });
+  });
+
   it("clear all keys and the pointer on reset", () => {
     const input = ready();
     input.keyDown("w");
