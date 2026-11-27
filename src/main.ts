@@ -1,5 +1,5 @@
 import "./styles.css";
-import { WebGLRenderer } from "three";
+import { WebGLRenderer, type Camera, type Scene } from "three";
 import { CONFIG } from "./config";
 import {
   blendHearse,
@@ -7,8 +7,10 @@ import {
   stepHearse,
   type HearseState,
 } from "./logic/hearse";
+import { resolveHearse } from "./logic/collision";
 import { createInput } from "./logic/input";
 import { introProgress } from "./logic/intro";
+import { buildMap } from "./logic/map";
 import { initialState, next, type SessionEvent } from "./logic/session";
 import { createGameScene } from "./render/game";
 import { createIntroScene } from "./render/intro";
@@ -25,11 +27,24 @@ const renderer = new WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
 const intro = createIntroScene();
-const game = createGameScene(renderer, import.meta.env.BASE_URL);
+const map = buildMap(CONFIG.map);
+const game = createGameScene(renderer, import.meta.env.BASE_URL, map);
+let gameLoaded = false;
+game.loaded
+  .then(() => {
+    gameLoaded = true;
+  })
+  .catch((error: unknown) => {
+    console.error("Cannot load the cemetery.", error);
+  });
 const input = createInput(CONFIG.joystick);
 createJoystick(canvas, input);
 
-const START_HEARSE = initialHearse(0, 0, Math.PI);
+const START_HEARSE = initialHearse(
+  map.hearseStart.x,
+  map.hearseStart.z,
+  map.hearseStart.heading,
+);
 let hearse: HearseState = START_HEARSE;
 let previousHearse: HearseState = START_HEARSE;
 let accumulator = 0;
@@ -78,6 +93,20 @@ intro.loaded
   });
 
 const query = new URLSearchParams(window.location.search);
+const debug = query.get("debug") === "1";
+/** Draw calls of the last frame (shadow passes included). */
+let lastDrawCalls = 0;
+let debugFrames = 0;
+
+function draw(target: Scene, camera: Camera): void {
+  renderer.render(target, camera);
+  lastDrawCalls = renderer.info.render.calls;
+  debugFrames += 1;
+  if (debug && debugFrames % 120 === 0) {
+    console.info(`draw calls: ${String(lastDrawCalls)}`);
+  }
+}
+
 if (query.get("test") === "1") {
   // `?test=1&hold=<0..1>` holds the intro at that progress from the first frame,
   // so a slow software-WebGL test run cannot miss the intro state. Players never send it.
@@ -96,6 +125,8 @@ if (query.get("test") === "1") {
       frozenProgress = value;
     },
     hearse: () => ({ ...hearse }),
+    gameLoaded: () => gameLoaded,
+    drawCalls: () => lastDrawCalls,
   };
 }
 
@@ -109,7 +140,12 @@ function stepLogic(frameSeconds: number): number {
   accumulator = Math.min(accumulator, step * CONFIG.maxStepsPerFrame);
   while (accumulator >= step) {
     previousHearse = hearse;
-    hearse = stepHearse(hearse, input.vector(), step, CONFIG.hearse);
+    hearse = resolveHearse(
+      stepHearse(hearse, input.vector(), step, CONFIG.hearse),
+      CONFIG.hearse.radius,
+      map.obstacles,
+      map.bounds,
+    );
     accumulator -= step;
   }
   return accumulator / step;
@@ -122,7 +158,7 @@ renderer.setAnimationLoop((time: number) => {
   if (state === "playing") {
     const alpha = stepLogic(frameSeconds);
     game.update(blendHearse(previousHearse, hearse, alpha), frameSeconds);
-    renderer.render(game.scene, game.camera);
+    draw(game.scene, game.camera);
     return;
   }
   if (state === "intro") {
@@ -139,5 +175,5 @@ renderer.setAnimationLoop((time: number) => {
     progress = 1;
   }
   intro.update(progress);
-  renderer.render(intro.scene, intro.camera);
+  draw(intro.scene, intro.camera);
 });

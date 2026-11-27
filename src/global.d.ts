@@ -8,5 +8,9 @@ interface Window {
     freezeIntro: (progress: number | null) => void;
     /** Hearse state: position in metres, heading in radians, speed in m/s. */
     hearse: () => { x: number; z: number; heading: number; speed: number };
+    /** True when the cemetery models are in the game scene. */
+    gameLoaded: () => boolean;
+    /** Draw calls of the last frame, shadow passes included. */
+    drawCalls: () => number;
   };
 }

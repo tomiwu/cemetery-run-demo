@@ -29,6 +29,54 @@ export const CONFIG = {
     slowTurnShare: 0.35,
     /** Longest logic step in seconds. */
     maxStepSeconds: 0.05,
+    /** Collision circle radius in metres. */
+    radius: 1.4,
+  },
+  /**
+   * The cemetery map. x goes right, z goes toward the camera (south). The gate is in the
+   * south wall (z = length / 2), the chapel is at the north end (z = -length / 2).
+   */
+  map: {
+    /** Seed of the random function that places graves, trees and stones. */
+    seed: 5,
+    /** Inside size of the walls in metres. */
+    width: 60,
+    length: 90,
+    wallThickness: 0.4,
+    /** Width of the gate opening in the south wall. */
+    gateWidth: 6,
+    roadWidth: 5,
+    /** The loop road is a rectangle. These are the distances of its centre line from the middle. */
+    loopHalfWidth: 22,
+    loopHalfLength: 28,
+    /** Distance from the gate to the hearse start, on the main road. */
+    startFromGate: 8,
+    /** The chapel. The door is on the south side. */
+    chapel: { width: 6.6, depth: 8.5, plazaWidth: 16, plazaDepth: 6.5 },
+    /** Number of candle slots, their distance from each other, and from the door. */
+    candleSlots: { count: 5, spacing: 1.4, fromDoor: 1.4 },
+    /** Grave rows in each of the two fields. */
+    graves: {
+      columns: 4,
+      columnSpacing: 4,
+      /** Centre of the first column from the main road centre line. */
+      firstColumn: 4.5,
+      rows: 10,
+      rowSpacing: 4.8,
+      firstRow: -22.5,
+      /** Largest random shift of a gravestone in metres. */
+      jitter: 0.25,
+      /** Share of the graves that have no stone. */
+      gap: 0.08,
+      /** Number of different gravestone models. */
+      variants: 7,
+      radius: 0.6,
+    },
+    trees: { count: 13, radius: 1, variants: 3 },
+    pumpkins: { count: 5, radius: 0.3 },
+    lightposts: { radius: 0.25 },
+    /** Zombie spawn points. `clearance` is the least distance to any obstacle. */
+    spawns: { count: 16, clearance: 1.5, roadMargin: 1 },
   },
   /** Fixed logic step in seconds (60 steps per second). */
   logicStepSeconds: 1 / 60,

@@ -15,7 +15,7 @@ src/
   main.ts          wires logic, render, UI and audio; one requestAnimationFrame loop
   config.ts        all gameplay numbers
   strings.ts       all player text (English)
-  logic/           pure TypeScript, unit tested (session, input, motion, spawn, waves, collision, score, candles)
+  logic/           pure TypeScript, unit tested (session, input, motion, map, spawn, waves, collision, score, candles)
   render/          Three.js scene, camera, models, effects, auto-quality
   ui/              DOM overlay: HUD, screens, mute button
   audio/           Web Audio music loop and pop sound
