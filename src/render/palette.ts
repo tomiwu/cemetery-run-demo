@@ -37,6 +37,27 @@ export const PALETTE = {
   iron: "#141415",
   tire: "#0C0C0D",
   plate: "#D8D2C4",
+  /** Derived: stone, dark brick, earth and field tones for the intro. */
+  stoneCap: "#8A7A70",
+  headstoneLight: "#8A8082",
+  chapelBase: "#5A5048",
+  brickCap: "#6A4030",
+  graveBorder: "#3A3329",
+  fieldOlive: "#4A5230",
+  groundCemetery: "#2F3126",
+  hills: "#2E3A33",
+  pathRut: "#8E7653",
+  /** Derived: wheel disc, and the dusk sky seen in the hearse paint. */
+  wheelDisc: "#2A2A2C",
+  reflectionGround: "#141210",
+  reflectionHorizonLow: "#1c1815",
+  reflectionHorizon: "#9A7A62",
+  reflectionLow: "#8A7078",
+  reflectionMid: "#7A7690",
+  reflectionHigh: "#6a7088",
+  /** Derived: fog and moon colours of the game scene. */
+  gameFog: "#5a4f58",
+  moon: "#a9b4d6",
   /** UI palette (Candle Graphite). */
   uiBackground: "#161513",
 } as const;

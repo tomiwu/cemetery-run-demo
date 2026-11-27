@@ -19,7 +19,12 @@ import {
   SRGBColorSpace,
   type Texture,
 } from "three";
-import { GeometryBatch, mergePlain } from "./geometry";
+import {
+  GeometryBatch,
+  gradientAt,
+  mergePlain,
+  type GradientStop,
+} from "./geometry";
 import { PALETTE } from "./palette";
 
 /**
@@ -118,36 +123,24 @@ function skyReflection(): Texture {
   }
   const rows = 16;
   const columns = 4;
-  const stops: readonly (readonly [number, string])[] = [
-    [-1, "#141210"],
-    [-0.05, "#1c1815"],
-    [0.02, "#9A7A62"],
-    [0.25, "#8A7078"],
-    [0.55, "#7A7690"],
-    [1, "#6a7088"],
+  const stops: readonly GradientStop[] = [
+    [-1, PALETTE.reflectionGround],
+    [-0.05, PALETTE.reflectionHorizonLow],
+    [0.02, PALETTE.reflectionHorizon],
+    [0.25, PALETTE.reflectionLow],
+    [0.55, PALETTE.reflectionMid],
+    [1, PALETTE.reflectionHigh],
   ];
   const data = new Uint8Array(rows * columns * 4);
   const mixed = new Color();
-  const low = new Color();
-  const high = new Color();
   for (let row = 0; row < rows; row += 1) {
     // Row 0 is the bottom of the image.
     const height = -1 + (2 * (row + 0.5)) / rows;
-    let index = 0;
-    while (index < stops.length - 2 && height > (stops[index + 1]?.[0] ?? 1)) {
-      index += 1;
-    }
-    const from = stops[index] ?? stops[0];
-    const to = stops[index + 1] ?? stops[stops.length - 1];
-    if (from === undefined || to === undefined) {
-      throw new Error("The sky reflection needs colour stops.");
-    }
-    const k = Math.min(1, Math.max(0, (height - from[0]) / (to[0] - from[0])));
-    mixed.copy(low.set(from[1])).lerp(high.set(to[1]), k);
+    gradientAt(stops, height, mixed);
+    // Store sRGB bytes: the texture is tagged as sRGB.
+    const srgb = mixed.convertLinearToSRGB();
     for (let column = 0; column < columns; column += 1) {
       const offset = (row * columns + column) * 4;
-      // Store sRGB bytes: the texture is tagged as sRGB.
-      const srgb = mixed.clone().convertLinearToSRGB();
       data[offset] = Math.round(srgb.r * 255);
       data[offset + 1] = Math.round(srgb.g * 255);
       data[offset + 2] = Math.round(srgb.b * 255);
@@ -359,7 +352,7 @@ function spokesGeometry(): BufferGeometry {
   const batch = new GeometryBatch();
   const disc = new CylinderGeometry(0.26, 0.26, 0.27, 16);
   disc.rotateZ(Math.PI / 2);
-  batch.add(disc, { color: "#2A2A2C" });
+  batch.add(disc, { color: PALETTE.wheelDisc });
   const cap = new CylinderGeometry(0.07, 0.07, 0.31, 8);
   cap.rotateZ(Math.PI / 2);
   batch.add(cap, { color: PALETTE.wheel });

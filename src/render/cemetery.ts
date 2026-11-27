@@ -55,7 +55,7 @@ function arch(batch: GeometryBatch, options: ArchOptions): void {
     dy: number,
   ): { x: number; y: number; z: number } =>
     facing === "side"
-      ? { x: x + 0, y: y + dy, z: z + dx }
+      ? { x, y: y + dy, z: z + dx }
       : { x: x + dx, y: y + dy, z };
   const depth = 0.1;
   batch.add(new BoxGeometry(width, straight, depth), {
@@ -99,7 +99,7 @@ export function addChapel(scenery: GeometryBatch, glow: GeometryBatch): void {
     x,
     y: groundY + 0.1,
     z,
-    color: "#5A5048",
+    color: PALETTE.chapelBase,
   });
   scenery.add(new BoxGeometry(width, wall, length), {
     x,
@@ -118,7 +118,6 @@ export function addChapel(scenery: GeometryBatch, glow: GeometryBatch): void {
     x: x + width / 2 + 1.3,
     y: groundY + wall - 1.2,
     z: z + 1.5,
-    scale: [1, 1, 1],
     color: PALETTE.chapelRoof,
   });
   // Steep gable roof, with a small overhang.
@@ -219,7 +218,11 @@ export function addGraves(scenery: GeometryBatch): Candle[] {
       if (!isFree(gx, gz)) {
         continue;
       }
-      const tone = mixColor(PALETTE.headstone, "#8A8082", random() * 0.6);
+      const tone = mixColor(
+        PALETTE.headstone,
+        PALETTE.headstoneLight,
+        random() * 0.6,
+      );
       const turn = (random() - 0.5) * 0.3;
       const kind = random();
       const stoneY = groundY;
@@ -277,7 +280,7 @@ export function addGraves(scenery: GeometryBatch): Candle[] {
         y: stoneY + 0.05,
         z: gz + 1,
         turn,
-        color: "#3A3329",
+        color: PALETTE.graveBorder,
       });
       if (random() < 0.78) {
         candles.push({ x: gx + 0.55, y: stoneY + 0.22, z: gz - 0.55 });

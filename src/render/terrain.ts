@@ -74,12 +74,12 @@ const FIELD_COLORS: readonly string[] = [
   PALETTE.foliageLight,
   PALETTE.fieldWarm,
   PALETTE.grassDark,
-  "#4A5230",
+  PALETTE.fieldOlive,
 ];
 
 function groundColor(x: number, z: number, noise: number): Color {
   if (cemeteryDistance(x, z) < 2) {
-    return mixColor("#2F3126", PALETTE.foliageDark, noise);
+    return mixColor(PALETTE.groundCemetery, PALETTE.foliageDark, noise);
   }
   const cell = Math.floor((x + 400) / 30 + Math.sin(z * 0.021) * 0.9);
   const row = Math.floor((z + 400) / 41 + Math.sin(x * 0.017) * 0.8);
@@ -90,7 +90,7 @@ function groundColor(x: number, z: number, noise: number): Color {
     noise * 0.6,
   );
   const hills = smoothstep(85, 175, Math.hypot(x, z - 20));
-  return field.lerp(new Color("#2E3A33"), hills * 0.6);
+  return field.lerp(new Color(PALETTE.hills), hills * 0.6);
 }
 
 /** The ground: one mesh with vertex colours. Flat shading gives the low-poly look. */
@@ -187,7 +187,7 @@ export function roadGeometry(): BufferGeometry {
     height: (x, z) => heightAt(x, z) + 0.05,
     color: (u, z) => {
       const rut = Math.abs(u);
-      const lit = mixColor(PALETTE.pathShadow, "#8E7653", 1 - rut ** 2);
+      const lit = mixColor(PALETTE.pathShadow, PALETTE.pathRut, 1 - rut ** 2);
       const patch = 0.5 + 0.5 * Math.sin(z * 0.9 + u * 3);
       lit.lerp(new Color(PALETTE.pathLit), patch * 0.15);
       // The edge fades into the grass.
@@ -215,7 +215,10 @@ export function riverGeometry(): BufferGeometry {
     height: (_x, z) => waterHeight(z),
     color: (u, z) => {
       const far = smoothstep(-30, 150, z);
-      const sky = mixColor(PALETTE.water, PALETTE.horizonGlow, far * 0.75);
+      // Near water is dark blue-grey like the high sky; far water glows like the horizon.
+      const sky = mixColor(PALETTE.skyTop, PALETTE.water, 0.3 + far * 0.7)
+        .lerp(new Color(PALETTE.horizonGlow), far * 0.75)
+        .multiplyScalar(0.6 + 0.4 * far);
       const streak = 0.5 + 0.5 * Math.sin(z * 0.35 + u * 2);
       sky.lerp(new Color(PALETTE.horizonGlowLight), streak * 0.18 * far);
       return sky.lerp(

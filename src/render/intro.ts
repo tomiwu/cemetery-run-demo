@@ -21,7 +21,14 @@ import {
 import { sampleIntro } from "../logic/intro";
 import { addChapel, addGraves, addTrees } from "./cemetery";
 import { addGate, addWalls } from "./gate";
-import { GeometryBatch, mixColor, seeded, smoothstep } from "./geometry";
+import {
+  GeometryBatch,
+  gradientAt,
+  mixColor,
+  seeded,
+  smoothstep,
+  type GradientStop,
+} from "./geometry";
 import { buildHearse } from "./hearse";
 import { PALETTE } from "./palette";
 import {
@@ -58,7 +65,7 @@ export function skyDome(
   const position = geometry.getAttribute("position");
   const colors: number[] = [];
   const color = new Color();
-  const stops: readonly (readonly [number, Color])[] =
+  const stops: readonly GradientStop[] =
     mid === undefined && glow === undefined
       ? [
           [0, low],
@@ -72,18 +79,7 @@ export function skyDome(
         ];
   for (let i = 0; i < position.count; i += 1) {
     const height = Math.max(0, position.getY(i) / SKY_RADIUS);
-    const p = Math.min(1, Math.pow(height / spread, 0.7));
-    let index = 0;
-    while (index < stops.length - 2 && p > (stops[index + 1]?.[0] ?? 1)) {
-      index += 1;
-    }
-    const from = stops[index];
-    const to = stops[index + 1];
-    if (from === undefined || to === undefined) {
-      throw new Error("The sky needs two colours.");
-    }
-    const k = Math.min(1, Math.max(0, (p - from[0]) / (to[0] - from[0])));
-    color.copy(from[1]).lerp(to[1], k);
+    gradientAt(stops, Math.min(1, Math.pow(height / spread, 0.7)), color);
     colors.push(color.r, color.g, color.b);
   }
   geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));

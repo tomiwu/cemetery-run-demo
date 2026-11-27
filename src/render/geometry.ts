@@ -85,8 +85,7 @@ export class GeometryBatch {
   }
 
   build(): BufferGeometry {
-    const merged = mergeGeometries(this.parts, false);
-    return merged;
+    return mergeGeometries(this.parts, false);
   }
 }
 
@@ -100,13 +99,35 @@ export function mergePlain(sources: readonly BufferGeometry[]): BufferGeometry {
     }
     return geometry;
   });
-  const merged = mergeGeometries(parts, false);
-  return merged;
+  return mergeGeometries(parts, false);
 }
 
 /** A colour between `a` and `b`. `k` is 0..1. */
 export function mixColor(a: string, b: string, k: number): Color {
   return new Color(a).lerp(new Color(b), Math.min(1, Math.max(0, k)));
+}
+
+export type GradientStop = readonly [number, string | Color];
+
+const scratch = new Color();
+
+/** The colour of a gradient at `position`, written to `target`. Stops go from low to high. */
+export function gradientAt(
+  stops: readonly GradientStop[],
+  position: number,
+  target: Color,
+): Color {
+  let index = 0;
+  while (index < stops.length - 2 && position > (stops[index + 1]?.[0] ?? 1)) {
+    index += 1;
+  }
+  const from = stops[index];
+  const to = stops[index + 1];
+  if (from === undefined || to === undefined) {
+    throw new Error("A gradient needs two colour stops.");
+  }
+  const k = Math.min(1, Math.max(0, (position - from[0]) / (to[0] - from[0])));
+  return target.set(from[1]).lerp(scratch.set(to[1]), k);
 }
 
 export function smoothstep(

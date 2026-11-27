@@ -21,7 +21,6 @@ const LEAF_HEIGHT = 1.85;
 const WALL_HEIGHT = 1.15;
 const WALL_THICKNESS = 0.55;
 const OPEN_ANGLE = 1.15;
-const STONE_CAP = "#8A7A70";
 
 function leaf(batch: GeometryBatch, side: number, groundY: number): void {
   // Build the leaf in a frame that starts at the hinge and runs along local +x.
@@ -81,13 +80,13 @@ function pillar(
     x,
     y: groundY + 0.15,
     z: GATE_Z,
-    color: STONE_CAP,
+    color: PALETTE.stoneCap,
   });
   scenery.add(new BoxGeometry(PILLAR_SIZE + 0.25, 0.2, PILLAR_SIZE + 0.25), {
     x,
     y: groundY + PILLAR_HEIGHT + 0.1,
     z: GATE_Z,
-    color: STONE_CAP,
+    color: PALETTE.stoneCap,
   });
   // Small lantern: iron foot, warm glass, iron roof.
   const top = groundY + PILLAR_HEIGHT + 0.2;
@@ -147,7 +146,7 @@ export function addWalls(scenery: GeometryBatch): void {
         0.1,
         alongX ? WALL_THICKNESS + 0.12 : length,
       ),
-      { x, y: groundY + WALL_HEIGHT + 0.03, z, color: "#6A4030" },
+      { x, y: groundY + WALL_HEIGHT + 0.03, z, color: PALETTE.brickCap },
     );
   };
   const step = 3;

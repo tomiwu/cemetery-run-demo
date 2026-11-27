@@ -28,11 +28,11 @@ import { PALETTE } from "./palette";
 /** Night colours. The ground is the surface colour of the palette (PRD section 6). */
 const GROUND_COLOR = PALETTE.grassDark;
 const PATH_COLOR = PALETTE.pathShadow;
-const FOG_COLOR = "#5a4f58";
+const FOG_COLOR = PALETTE.gameFog;
 /** Dusk sky (VISUAL_REFERENCE.md): warm glow low, blue-grey high. */
 const SKY_LOW = PALETTE.horizonGlow;
 const SKY_HIGH = PALETTE.skyTop;
-const MOON_COLOR = 0xa9b4d6;
+const MOON_COLOR = PALETTE.moon;
 
 const CANDLE_COLOR = PALETTE.candle;
 
