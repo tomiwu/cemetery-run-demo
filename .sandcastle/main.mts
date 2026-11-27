@@ -47,6 +47,7 @@ import { join } from "node:path";
 import {
   type CiJob,
   CLAUDE_LIMIT,
+  resumeAction,
   ciStateOf,
   judgeNextStep,
   needsVisualJudge,
@@ -373,6 +374,76 @@ async function runJudge(
   return verdict;
 }
 
+// Local checks with fixer runs (MAX_FIX_ATTEMPTS).
+async function checksWithFixes(
+  sandbox: sandcastle.Sandbox,
+  args: Record<string, string>,
+  issueNumber: number,
+  tag: string,
+): Promise<boolean> {
+  for (let attempt = 0; attempt <= MAX_FIX_ATTEMPTS; attempt++) {
+    const result = await runChecks(sandbox);
+    if (result.ok) return true;
+    console.log(`Checks failed for #${issueNumber} (attempt ${attempt}).`);
+    if (attempt === MAX_FIX_ATTEMPTS) return false;
+    await runPhase(sandbox, {
+      name: `fixer-${tag}${attempt + 1}`,
+      maxIterations: 1,
+      promptFile: "./.sandcastle/fix-prompt.md",
+      promptArgs: { ...args, CHECK_LOG: result.log.slice(-12000) },
+      checkLog: result.log.slice(-12000),
+    });
+  }
+  return false;
+}
+
+// Judge rounds with visual fixes in between. gaps = [] means PASS.
+async function visualRounds(
+  sandbox: sandcastle.Sandbox,
+  args: Record<string, string>,
+  issueNumber: number,
+): Promise<{ passed: boolean; gaps: string[] }> {
+  for (let round = 1; ; round++) {
+    const verdict = await runJudge(sandbox, args, round);
+    const step = judgeNextStep(verdict, round, JUDGE_ROUNDS);
+    console.log(
+      `Visual judge round ${round}: ${verdict.verdict}, ${verdict.gaps.length} gaps -> ${step}.`,
+    );
+    if (step === "pass") return { passed: true, gaps: [] };
+    if (step === "give-up")
+      return {
+        passed: true,
+        gaps: verdict.gaps.length ? verdict.gaps : ["the judge wrote no gap list"],
+      };
+    await runPhase(sandbox, {
+      name: `visual-fixer-${round}`,
+      maxIterations: 1,
+      promptFile: "./.sandcastle/visual-fix-prompt.md",
+      promptArgs: { ...args, GAPS: verdict.gaps.map((g) => `- ${g}`).join("\n") },
+    });
+    if (!(await checksWithFixes(sandbox, args, issueNumber, `v${round}-`)))
+      return { passed: false, gaps: verdict.gaps };
+  }
+}
+
+// Visual FAIL: labels needs-validation + visual-fail, the gap list as a PR comment, no merge.
+function markVisualFail(url: string, gaps: string[]): void {
+  spawnSync("gh", ["pr", "edit", url, "--add-label", "needs-validation", "--add-label", "visual-fail"], {
+    stdio: "inherit",
+  });
+  spawnSync(
+    "gh",
+    [
+      "pr",
+      "comment",
+      url,
+      "--body",
+      `Visual judge (${JUDGE_MODEL}, effort ${effortFor("judge")}): FAIL after ${JUDGE_ROUNDS} rounds. The loop does not merge this PR (label visual-fail). A loop restart gives it one more judge and fix run.\n\n${gaps.map((g) => `- ${g}`).join("\n")}`,
+    ],
+    { stdio: "inherit" },
+  );
+}
+
 // Optional host check after the implementer (rule 4). Empty: no check.
 function earlyHostCheck(worktree: string): { ok: boolean; log: string } {
   if (!CONFIG.earlyHostCheck) return { ok: true, log: "" };
@@ -597,6 +668,8 @@ type LoopEvent = "pr_opened" | "ci_failed" | "loop_idle" | "loop_crashed" | "don
 
 // One event per state change: a repeat of the same event with the same state key is not sent.
 const deduper = new EventDeduper();
+// Issues whose visual-fail PR got its one retry in this loop run.
+const visualRetried = new Set<number>();
 
 async function postEvent(
   event: LoopEvent,
@@ -733,9 +806,10 @@ async function waitCiWithFixes(
   url: string,
   branch: string,
   issueNumber: number,
+  expectedHead?: string,
 ): Promise<boolean> {
   const args = { PROJECT, ISSUE: String(issueNumber), BRANCH: branch };
-  let pushed: string | undefined;
+  let pushed: string | undefined = expectedHead;
   for (let attempt = 0; attempt <= MAX_FIX_ATTEMPTS; attempt++) {
     if (await waitCi(url, pushed)) return true;
     if (attempt === MAX_FIX_ATTEMPTS) break;
@@ -812,7 +886,7 @@ async function mainLoop(): Promise<void> {
     currentIssue = issue.number;
 
     const existing = JSON.parse(
-      sh("gh", ["pr", "list", "--state", "open", "--json", "url,headRefName"]),
+      sh("gh", ["pr", "list", "--state", "open", "--json", "url,headRefName,labels"]),
     ).find((p: { headRefName: string }) =>
       p.headRefName.startsWith(`sandcastle/issue-${issue.number}-`),
     );
@@ -822,7 +896,48 @@ async function mainLoop(): Promise<void> {
 
     if (existing) {
       console.log(`Issue #${issue.number}: resume the open PR ${existing.url}.`);
-      if (await waitCiWithFixes(existing.url, branch, issue.number)) {
+      const prLabels: string[] = (existing.labels ?? []).map((l: { name: string }) => l.name);
+      const action = resumeAction(prLabels, visualRetried.has(issue.number));
+      let pushed: string | undefined;
+      if (action === "wait") {
+        console.log(`PR ${existing.url} has visual-fail; it waits for a human or a loop restart.`);
+        waiting.add(issue.number);
+        continue;
+      }
+      if (action === "visual-retry") {
+        visualRetried.add(issue.number);
+        console.log(`PR ${existing.url} has visual-fail: one more judge and fix run.`);
+        spawnSync("git", ["fetch", "origin", branch]);
+        spawnSync("git", ["branch", "-f", branch, `origin/${branch}`]);
+        const box = await createBox(() => sandcastle.createSandbox({
+          branch,
+          baseBranch: `origin/${BASE_BRANCH}`,
+          sandbox: podman({ imageName: IMAGE }),
+          hooks,
+        }));
+        let v: { passed: boolean; gaps: string[] };
+        try {
+          v = await visualRounds(box, args, issue.number);
+        } finally {
+          await safeClose(box);
+        }
+        sh("git", ["push", "-f", "origin", branch]);
+        pushed = sh("git", ["rev-parse", branch]).trim();
+        if (!v.passed || v.gaps.length) {
+          markVisualFail(existing.url, v.passed ? v.gaps : ["the local checks fail after the visual fixes"]);
+          waiting.add(issue.number);
+          continue;
+        }
+        spawnSync(
+          "gh",
+          ["pr", "edit", existing.url, "--remove-label", "visual-fail", "--remove-label", "needs-validation"],
+          { stdio: "inherit" },
+        );
+        spawnSync("gh", ["pr", "comment", existing.url, "--body", `Visual judge (${JUDGE_MODEL}): PASS on the retry.`], {
+          stdio: "inherit",
+        });
+      }
+      if (await waitCiWithFixes(existing.url, branch, issue.number, pushed)) {
         if (!mergeOrWait(existing.url, issue.number, true)) {
           waiting.add(issue.number);
           await postEvent(
@@ -869,48 +984,15 @@ async function mainLoop(): Promise<void> {
           promptFile: "./.sandcastle/review-prompt.md",
           promptArgs: args,
         });
-        const checksWithFixes = async (tag: string): Promise<boolean> => {
-          for (let attempt = 0; attempt <= MAX_FIX_ATTEMPTS; attempt++) {
-            const result = await runChecks(sandbox);
-            if (result.ok) return true;
-            console.log(`Checks failed for #${issue.number} (attempt ${attempt}).`);
-            if (attempt === MAX_FIX_ATTEMPTS) return false;
-            await runPhase(sandbox, {
-              name: `fixer-${tag}${attempt + 1}`,
-              maxIterations: 1,
-              promptFile: "./.sandcastle/fix-prompt.md",
-              promptArgs: { ...args, CHECK_LOG: result.log.slice(-12000) },
-              checkLog: result.log.slice(-12000),
-            });
-          }
-          return false;
-        };
-        passed = await checksWithFixes("");
+        passed = await checksWithFixes(sandbox, args, issue.number, "");
         const changed = (
           await sandbox.exec(`git diff --name-only origin/${BASE_BRANCH}...HEAD`)
         ).stdout.split("\n");
         const labels = issue.labels.map((l) => l.name);
         if (passed && needsVisualJudge(labels, issue.body ?? "", changed)) {
-          for (let round = 1; ; round++) {
-            const verdict = await runJudge(sandbox, args, round);
-            const step = judgeNextStep(verdict, round, JUDGE_ROUNDS);
-            console.log(
-              `Visual judge round ${round}: ${verdict.verdict}, ${verdict.gaps.length} gaps -> ${step}.`,
-            );
-            if (step === "pass") break;
-            if (step === "give-up") {
-              visualGaps = verdict.gaps.length ? verdict.gaps : ["the judge wrote no gap list"];
-              break;
-            }
-            await runPhase(sandbox, {
-              name: `visual-fixer-${round}`,
-              maxIterations: 1,
-              promptFile: "./.sandcastle/visual-fix-prompt.md",
-              promptArgs: { ...args, GAPS: verdict.gaps.map((g) => `- ${g}`).join("\n") },
-            });
-            passed = await checksWithFixes(`v${round}-`);
-            if (!passed) break;
-          }
+          const v = await visualRounds(sandbox, args, issue.number);
+          passed = v.passed;
+          visualGaps = v.gaps;
         }
       }
     } finally {
@@ -950,18 +1032,7 @@ async function mainLoop(): Promise<void> {
     await postEvent("pr_opened", { issue: issue.number, pr: url });
     if (visualGaps.length) {
       // The judge did not pass the look after JUDGE_ROUNDS: no auto-merge, a human decides.
-      spawnSync("gh", ["pr", "edit", url, "--add-label", "needs-validation"], { stdio: "inherit" });
-      spawnSync(
-        "gh",
-        [
-          "pr",
-          "comment",
-          url,
-          "--body",
-          `Visual judge (${JUDGE_MODEL}, effort ${effortFor("judge")}): FAIL after ${JUDGE_ROUNDS} rounds. The loop does not merge this PR.\n\n${visualGaps.map((g) => `- ${g}`).join("\n")}`,
-        ],
-        { stdio: "inherit" },
-      );
+      markVisualFail(url, visualGaps);
       waiting.add(issue.number);
       await postEvent(
         "ci_failed",

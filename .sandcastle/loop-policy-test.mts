@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   EventDeduper,
+  resumeAction,
   ciStateOf,
   judgeNextStep,
   needsVisualJudge,
@@ -319,6 +320,15 @@ check(
   "ci: no expected head -> plain state; no runs -> none",
   ciStateOf("a", undefined, [{ status: "completed", conclusion: "failure" }]) === "failure" &&
     ciStateOf("a", "a", []) === "none",
+);
+
+// Resume: a visual-fail PR is never merged by the CI path.
+check(
+  "resume: visual-fail -> one visual retry, then wait; other PRs -> ci",
+  resumeAction(["needs-validation", "visual-fail"], false) === "visual-retry" &&
+    resumeAction(["visual-fail"], true) === "wait" &&
+    resumeAction(["needs-validation"], false) === "ci" &&
+    resumeAction([], true) === "ci",
 );
 
 if (fails) {
