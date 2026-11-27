@@ -63,6 +63,7 @@ import {
   jobGate,
   effortFor,
   limitWait,
+  freshLogText,
   modelOfLabel,
   nextAgentAfterStall,
   phaseOfName,
@@ -134,10 +135,28 @@ function newestLog(name?: string): string | undefined {
   }
 }
 
-function logTail(name?: string): string {
+interface LogMark {
+  file?: string;
+  size: number;
+}
+
+function logMark(name?: string): LogMark {
+  const file = newestLog(name);
+  try {
+    return { file, size: file ? readFileSync(file, "utf8").length : 0 };
+  } catch {
+    return { file, size: 0 };
+  }
+}
+
+// The last 4000 chars of the phase log, but only text written after `since`
+// (an older retry's limit text must not classify this failure).
+function logTail(name: string | undefined, since: LogMark): string {
   const f = newestLog(name);
   try {
-    return f ? readFileSync(f, "utf8").slice(-4000) : "";
+    return f
+      ? freshLogText(f, readFileSync(f, "utf8"), since).slice(-4000)
+      : "";
   } catch {
     return "";
   }
@@ -201,17 +220,18 @@ async function runPhase(
       }
     }, 30_000);
     let failure = "";
+    const mark = logMark(name);
     try {
       const result = await sandbox.run({
         idleTimeoutSeconds: 1800,
         ...runOptions,
         agent: sandcastle.claudeCode(model, { effort, env }),
       });
-      const tail = logTail(name);
+      const tail = logTail(name, mark);
       if (result.commits.length || !(STALL.test(tail) || NETWORK_ERROR.test(tail))) return result;
-      failure = `stall text in the agent log: ${logTail(name).slice(-300)}`;
+      failure = `stall text in the agent log: ${tail.slice(-300)}`;
     } catch (error) {
-      failure = `${error} ${logTail(name).slice(-600)}`;
+      failure = `${error} ${logTail(name, mark).slice(-600)}`;
       if (!STALL.test(failure) && !NETWORK_ERROR.test(failure)) throw error;
     } finally {
       clearInterval(beat);
