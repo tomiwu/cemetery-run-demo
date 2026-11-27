@@ -6,3 +6,4 @@ public/assets
 package-lock.json
 .sandcastle
 docs/PRD.md
+docs/playtest/*.json

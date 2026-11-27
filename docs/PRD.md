@@ -5,7 +5,7 @@ Language: English, ASD-STE100 Simplified Technical English.
 
 ## 1. Goal
 
-A hidden demo browser game. The player drives a black estate hearse on the roads of a night cemetery. The player protects the chapel at the end of the road from cartoon zombies. The game is low-poly 3D, runs in a phone browser, and needs no install.
+A hidden demo browser game. The player drives a black estate hearse on the roads of a night cemetery. The player picks up a coffin at the chapel, drives it through a cemetery full of cartoon zombies, and delivers it to a freshly dug grave (D21). The game is low-poly 3D, runs in a phone browser, and needs no install.
 
 The game is a demo. It shows no names: no company, no town, no person, no phone number, no address. No site links to the game. People get the URL directly (link or QR code).
 
@@ -13,10 +13,10 @@ The game is a demo. It shows no names: no company, no town, no person, no phone 
 
 | # | Topic | Decision |
 |---|-------|----------|
-| D1 | Game | The player drives a black estate hearse (Mercedes-style shape, no badge, no logo) on cemetery roads at night. The player protects the chapel at the end of the road. |
-| D2 | Enemies | Cartoon zombies walk from between the graves toward the chapel. The hearse hits them. A hit zombie pops into dry leaves or dust. No gore, no blood. |
-| D3 | Lose condition | 5 candles burn at the chapel. Each zombie that reaches the chapel puts out one candle. |
-| D4 | Round | A round ends after 60 s or when all 5 candles are out. The end screen shows the score and a "Play again" button. |
+| D1 | Game | The player drives a black estate hearse (Mercedes-style shape, no badge, no logo) on cemetery roads at night. ~~The player protects the chapel at the end of the road.~~ Replaced by D21: the player delivers coffins from the chapel to dug graves. |
+| D2 | Enemies | Cartoon zombies (always many) wander between the graves and chase the hearse when it is near (D21; they no longer walk to the chapel). The hearse hits them. A hit zombie pops into dry leaves or dust. No gore, no blood. |
+| D3 | ~~Lose condition~~ | ~~5 candles burn at the chapel. Each zombie that reaches the chapel puts out one candle.~~ Replaced by D21 (2026-11-27): no chapel candles, no lose condition; grave candles stay as decoration. |
+| D4 | Round | A round ends after 60 s (D21: no candle end). The end screen shows deliveries, zombies popped, the score and a "Play again" button. |
 | D5 | Discount code | NO discount code. No server. |
 | D6 | Controls (phone) | Free driving, no lanes. Virtual drag joystick: the player puts a thumb anywhere on the screen and drags in a direction. The hearse turns to that direction and drives. Release: the hearse slows down and stops. |
 | D7 | Controls (desktop) | Arrow keys or WASD. |
@@ -42,22 +42,26 @@ The game is a demo. It shows no names: no company, no town, no person, no phone 
 | M2 | Agent | Claude Code, latest Sonnet (`claude-sonnet-5-5`), writes and reviews the code in the Sandcastle loop on the box. No Cursor cloud agents. |
 | D19 | Breakable graves | (Tomasz, t16u) Graves break on a hit and do not stop the hearse; a short speed penalty. Trees, walls and the chapel bounce softly. Wider grave spacing. See section 3. |
 | D20 | Power-ups | (Tomasz, t16u) Mystery "?" boxes give a random power-up for a few seconds: boost/drift and flamethrower first. HUD icon. See section 3. |
+| D21 | Core gameplay | (Tomasz, t20u, 2026-11-27) Delivery game. Pick up the coffin at the chapel (drive slowly into the pickup zone at the chapel door). One target grave at a time is shown freshly dug (open pit, earth mound, shovel) with a floating arrow and a HUD edge arrow. Drive slowly into its zone to deliver (+5). Then a new coffin waits at the chapel and a new grave is dug. Zombies pop when the hearse drives over them at speed (+1). If the hearse is too slow near zombies, they climb into the hearse (cartoon); a counter shows the zombies inside; they slow the hearse; at 3 inside the coffin is lost; speed shakes them off. 60 s round, score = 5 x deliveries + zombies popped. Replaces D3 and the chapel defence of D1. Numbers in section 3. |
+| D22 | Collision feel | (Tomasz, t20u) Natural arcade collision from playtest 1 (`docs/playtest/`): slide along walls, soft bounce, speed loss by angle, no sticky contact, small camera shake; tuning numbers in `docs/playtest/README.md`. A recorded playtest run (`.sandcastle/playtest.mjs`) checks it. |
 | M3 | Visual judge | (Tomasz, t15u, 2026-11-27) The agent that writes the code does not judge its own look. A separate read-only visual judge agent (`claude-opus-5-5`, effort `high`, set by `JUDGE_MODEL` and `EFFORT_JUDGE`) runs for each UI issue (label `visual` or `ui`, a "Visual match" criterion, or a change in `src/render/`, `src/ui/`, CSS, `index.html` or `public/`). It takes Playwright portrait screenshots (`.sandcastle/visual-shots.mjs`), compares them with `docs/targets/` and `docs/ref/`, and writes `VERDICT: PASS` or `FAIL` and a gap list. On FAIL, a visual fixer (the code agent) fixes the gaps, the checks run, and the judge looks again (up to 3 rounds). Still FAIL: the PR stays open with `needs-validation`; the loop does not merge it. The judge posts each verdict as an issue comment. |
 | M4 | Own podman store | (2026-11-27) The loop uses its own podman store `/workspace/cemetery-run-demo-podman` (wrapper in its `bin/`, written by `scripts/start-loop.sh`). Reason: after the box reboot on 2026-11-27 the shared store lost layer data. Other projects do not use this store. |
 | V1 | Versions | Newest stable on 2026-11-26, with two exceptions: TypeScript 6.0.3 (typescript-eslint 8.74.0 supports `<6.1.0`, so not TypeScript 7.0.2), and Playwright 1.65.1 (the same version as the Chromium in the loop image). |
 
 ## 3. Game rules (source of truth for `src/config.ts`)
 
-- Round length: 60 s. Candles: 5.
-- Score: +1 for each zombie hit. Bonus: +1 for each candle that still burns at the end of a full 60 s round (shown on the end screen).
+- Round length: 60 s. No chapel candles (D21).
+- Delivery loop (D21): the coffin waits at the chapel door. Pickup: the hearse stays in the pickup zone (radius 3 m) under 3 m/s for 0.5 s. Target grave: one at a time, a grave at least 20 m from the chapel, shown freshly dug with an arrow. Delivery: the hearse with the coffin stays in the grave zone (radius 2.5 m) under 3 m/s for 0.8 s. Then a new coffin at the chapel and a new dug grave (never the same grave twice in a row).
+- Score: +5 for each delivery, +1 for each zombie popped. End screen: deliveries, zombies popped, total.
+- Zombies inside (D21): when the hearse is under 2.5 m/s and a walking zombie is within 2.4 m for 0.6 s, the zombie climbs in. HUD counter "inside: N". Each zombie inside lowers the top speed by 8 %. At 3 inside: the coffin is lost (it goes back to the chapel), -3 score (not below 0), and all zombies jump out. Shake off: 1.5 s at 8 m/s or more, or a wall hit with an impact of 5 m/s or more, throws one zombie out (it pops, +1).
 - Waves: wave 1 from 0 s to 10 s is easy (few slow zombies). Then a new wave every 10 s. Each wave increases the spawn rate and the walk speed. Use a capped curve (no wave is impossible).
 - Zombies spawn at spawn points between the graves, never on the road in front of the hearse, and never within 6 m of the hearse.
-- Zombies walk toward the chapel along a simple path (straight line with small side steps around graves). No path-finding library.
+- Zombies (D21): always many (at least 10 alive from the start, up to 30 later). A zombie within 14 m of the hearse walks toward it; others wander between the graves. Straight lines with small side steps around graves. No path-finding library.
 - Hit: the hearse hits a zombie when the distance between their circles is less than the sum of their radii and the hearse speed is above a small minimum.
 - Obstacles (Tomasz, t16u, 2026-11-27, replaces "a hit stops the hearse"):
-  - Graves do NOT stop the hearse. A grave hit at 2 m/s or more breaks the grave into cartoon stone pieces and dust (no gore), the hearse loses about 30 % of its speed for 0.5 s, and it drives on. A broken grave stays as low rubble (no collision) for the rest of the round. Slower than 2 m/s: the hearse pushes against the grave and slides around it.
+  - Graves do NOT stop the hearse. A grave hit at 3 m/s or more breaks the grave into cartoon stone pieces and dust (no gore), the hearse keeps 75 % of its speed and drives on (D22). A broken grave stays as low rubble (no collision) for the rest of the round. Slower than 3 m/s: the hearse pushes against the grave and slides around it.
   - Trees, walls, the gate and the chapel stay solid. The hearse bounces off softly (keeps the tangent speed, a small rebound), it never stops dead and never sticks.
-  - The graves stand wider apart, so that the hearse can drive between grave rows.
+  - The graves stand wider apart (centres at least 5.0 m in a row, 5.5 m between rows), so that the hearse can drive between them. Tuning numbers: `docs/playtest/README.md` (D22).
 - Power-ups (Tomasz, t16u, 2026-11-27): mystery boxes ("?" boxes, like in kart racers) appear on the map. Driving through a box gives one random power-up for a few seconds; one power-up at a time. First power-ups: boost (more top speed and a drift with tighter turns) and flamethrower (cartoon flames in front of the hearse pop zombies in a short cone, no gore). The HUD shows an icon of the active power-up and its time left.
 - The hearse cannot leave the cemetery walls.
 - All numbers above are in `src/config.ts`. Tests use those values.
@@ -66,8 +70,8 @@ The game is a demo. It shows no names: no company, no town, no person, no phone 
 
 1. Intro (about 6 s, skippable with a tap).
 2. "Tap to start" with one control hint ("Drag anywhere to drive").
-3. Game: 3D scene, HUD with the timer, the score and the 5 candles. Mute button always visible.
-4. End screen: title, score, the reason (time up or candles out), "Play again".
+3. Game: 3D scene, HUD with the timer, the score, the coffin state (at the chapel / in the hearse), an edge arrow to the target, the zombies-inside counter and the active power-up. Mute button always visible.
+4. End screen: title, deliveries, zombies popped, total, "Play again".
 
 ## 5. Architecture
 
