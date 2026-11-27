@@ -1,0 +1,126 @@
+import { describe, expect, it } from "vitest";
+import { CONFIG } from "../config";
+import { buildMap } from "./map";
+import { createRandom } from "./random";
+import { createWorld, stepWorld, type World } from "./world";
+
+const map = buildMap(CONFIG.map);
+const NO_INPUT = { x: 0, y: 0 };
+const STEP = CONFIG.logicStepSeconds;
+
+function run(
+  world: World,
+  seconds: number,
+  rng: () => number,
+  input = NO_INPUT,
+): World {
+  let current = world;
+  for (let i = 0; i < Math.round(seconds / STEP); i += 1) {
+    current = stepWorld(current, input, STEP, rng);
+  }
+  return current;
+}
+
+describe("createWorld", () => {
+  it("starts with the hearse at the start point and no zombies", () => {
+    const world = createWorld(map);
+    expect(world.hearse).toEqual({
+      x: map.hearseStart.x,
+      z: map.hearseStart.z,
+      heading: map.hearseStart.heading,
+      speed: 0,
+    });
+    expect(world.zombies).toEqual([]);
+    expect(world.time).toBe(0);
+    expect(world.events).toEqual([]);
+  });
+});
+
+describe("stepWorld", () => {
+  it("counts the time", () => {
+    const world = run(createWorld(map), 1, createRandom(1));
+    expect(world.time).toBeCloseTo(1, 6);
+  });
+
+  it("moves the hearse with the input", () => {
+    const before = createWorld(map);
+    const after = run(before, 1, createRandom(1), { x: 0, y: 1 });
+    expect(after.hearse.z).toBeLessThan(before.hearse.z);
+  });
+
+  it("stops the hearse at the wall", () => {
+    const world = run(createWorld(map), 12, createRandom(1), { x: 1, y: 0 });
+    expect(world.hearse.x).toBeLessThanOrEqual(
+      CONFIG.map.width / 2 - CONFIG.hearse.radius + 1e-9,
+    );
+  });
+
+  it("spawns the first zombie after the spawn interval", () => {
+    const rng = createRandom(CONFIG.spawn.seed);
+    const early = run(createWorld(map), CONFIG.spawn.baseInterval - 0.5, rng);
+    expect(early.zombies).toHaveLength(0);
+    const later = run(early, 1, rng);
+    expect(later.zombies).toHaveLength(1);
+  });
+
+  it("spawns one zombie each interval", () => {
+    const world = run(
+      createWorld(map),
+      CONFIG.spawn.baseInterval * 4 + 0.2,
+      createRandom(2),
+    );
+    expect(world.zombies.length).toBe(4);
+    expect(new Set(world.zombies.map((z) => z.id)).size).toBe(4);
+  });
+
+  it("never has more walking zombies than the maximum", () => {
+    // Fast spawn is not possible with the base interval, so a long run with a blocked chapel path is not needed:
+    // check the bound on a long run.
+    let world = createWorld(map);
+    const rng = createRandom(3);
+    for (let i = 0; i < 60 * 200; i += 1) {
+      world = stepWorld(world, NO_INPUT, STEP, rng);
+      expect(
+        world.zombies.filter((z) => z.state === "walking").length,
+      ).toBeLessThanOrEqual(CONFIG.spawn.maxAlive);
+    }
+  });
+
+  it("reports an arrived zombie in the events of that step only", () => {
+    let world = createWorld(map);
+    const rng = createRandom(5);
+    let seen = 0;
+    for (let i = 0; i < 60 * 120; i += 1) {
+      world = stepWorld(world, NO_INPUT, STEP, rng);
+      for (const event of world.events) {
+        expect(event.type).toBe("zombieArrived");
+        seen += 1;
+      }
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it("gives the same world for the same seed", () => {
+    const a = run(createWorld(map), 20, createRandom(8), { x: 0.3, y: 0.5 });
+    const b = run(createWorld(map), 20, createRandom(8), { x: 0.3, y: 0.5 });
+    expect(a).toEqual(b);
+  });
+
+  it("does not spawn a zombie within the minimum distance of the hearse", () => {
+    let world = createWorld(map);
+    const rng = createRandom(6);
+    const known = new Set<number>();
+    for (let i = 0; i < 60 * 60; i += 1) {
+      world = stepWorld(world, { x: 0, y: 0.6 }, STEP, rng);
+      for (const zombie of world.zombies) {
+        if (!known.has(zombie.id)) {
+          known.add(zombie.id);
+          expect(
+            Math.hypot(zombie.x - world.hearse.x, zombie.z - world.hearse.z),
+          ).toBeGreaterThanOrEqual(CONFIG.spawnMinDistance - 0.2);
+        }
+      }
+    }
+    expect(known.size).toBeGreaterThan(5);
+  });
+});

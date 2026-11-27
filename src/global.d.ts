@@ -8,6 +8,15 @@ interface Window {
     freezeIntro: (progress: number | null) => void;
     /** Hearse state: position in metres, heading in radians, speed in m/s. */
     hearse: () => { x: number; z: number; heading: number; speed: number };
+    /** The zombie list: position, heading, speed and state of each zombie. */
+    zombies: () => {
+      id: number;
+      x: number;
+      z: number;
+      heading: number;
+      speed: number;
+      state: "walking" | "popped" | "arrived";
+    }[];
     /** True when the cemetery models are in the game scene. */
     gameLoaded: () => boolean;
     /** Draw calls of the last frame, shadow passes included. */
