@@ -397,3 +397,11 @@ export function ciStateOf(
     ? "success"
     : "failure";
 }
+
+// Resume of an open PR (2026-11-27). A PR with the label `visual-fail` must not be merged
+// by the CI path. The loop gives it one new judge/fix run per loop start, then waits.
+export type ResumeAction = "visual-retry" | "wait" | "ci";
+export function resumeAction(labels: readonly string[], retriedThisRun: boolean): ResumeAction {
+  if (!labels.includes("visual-fail")) return "ci";
+  return retriedThisRun ? "wait" : "visual-retry";
+}
