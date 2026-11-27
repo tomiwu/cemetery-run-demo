@@ -10,7 +10,8 @@ export type Phase =
   | "xtensa-fixer"
   | "reviewer"
   | "fixer"
-  | "fixer-format";
+  | "fixer-format"
+  | "judge";
 
 // ---------- 1. Limit-reset-aware wall-clock wait ----------
 
@@ -200,6 +201,7 @@ export function effortFor(
     reviewer: "high",
     fixer: "medium",
     "fixer-format": "low",
+    judge: "high",
   };
   const key = `EFFORT_${phase.toUpperCase().replace(/-/g, "_")}`;
   const v = env[key];
@@ -209,7 +211,9 @@ export function effortFor(
 export const phaseOfName = (name: string, checkLog = ""): Phase =>
   name === "implementer"
     ? "implementer"
-    : name === "reviewer"
+    : name.startsWith("judge")
+      ? "judge"
+      : name === "reviewer"
       ? "reviewer"
       : name.startsWith("xtensa-fixer")
         ? "xtensa-fixer"
@@ -328,3 +332,51 @@ export function imageRecoveryStep(check: ImageCheck, attempt: number, rebuilt: b
 }
 
 export const IMAGE_CREATE_ERROR = /not found locally|image not known|no such image/i;
+
+// ---------------------------------------------------------------------------
+// Visual judge (Tomasz, 2026-11-27). A separate read-only agent (JUDGE_MODEL, a
+// thinking model at high effort) compares Playwright screenshots with docs/targets
+// and docs/ref and writes a verdict. The implementer does not judge its own look.
+// ---------------------------------------------------------------------------
+const UI_PATH = /^(src\/render\/|src\/ui\/|src\/.*\.css$|index\.html$|public\/)/;
+export function needsVisualJudge(
+  labels: readonly string[],
+  body: string,
+  changedFiles: readonly string[],
+): boolean {
+  if (labels.some((l) => /^(visual|ui)$/i.test(l))) return true;
+  if (/visual match/i.test(body)) return true;
+  return changedFiles.some((f) => UI_PATH.test(f.trim()));
+}
+
+export interface JudgeVerdict {
+  verdict: "pass" | "fail" | "missing";
+  gaps: string[];
+}
+// The judge writes `.sandcastle/context/judge.md` with a line `VERDICT: PASS` or
+// `VERDICT: FAIL` and one line per gap: `gap: <what> -> <fix>`.
+export function parseJudgeVerdict(text: string): JudgeVerdict {
+  const m = /^\s*VERDICT:\s*(PASS|FAIL)\b/im.exec(text);
+  const gaps = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => /^[-*]?\s*gap:/i.test(l))
+    .map((l) => l.replace(/^[-*]?\s*gap:\s*/i, ""));
+  if (!m) return { verdict: "missing", gaps };
+  return { verdict: m[1].toUpperCase() === "PASS" ? "pass" : "fail", gaps };
+}
+
+export type JudgeStep = "pass" | "fix" | "give-up";
+// round: 1-based judge round. A missing verdict counts as a fail (the judge must write it).
+export function judgeNextStep(v: JudgeVerdict, round: number, maxRounds: number): JudgeStep {
+  if (v.verdict === "pass") return "pass";
+  return round < maxRounds ? "fix" : "give-up";
+}
+
+// Remove secrets from text before a log line: `-e KEY=value` of podman and GitHub tokens.
+export function redactSecrets(text: string): string {
+  return text
+    .replace(/(-e\s+[A-Z][A-Z0-9_]*=)\S+/g, "$1***")
+    .replace(/\b(github_pat_|gh[pousr]_)[A-Za-z0-9_]{10,}/g, "$1***")
+    .replace(/(Bearer\s+)\S+/gi, "$1***");
+}
