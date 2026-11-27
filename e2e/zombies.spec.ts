@@ -70,8 +70,8 @@ test("zombies appear between the graves and walk to the chapel", async ({
       { timeout: 90_000 },
     )
     .toBe(true);
-  await page.keyboard.up("ArrowUp");
-  // Wait until at least 4 zombies are in the near and middle view, so the screenshot shows a group.
+  // Keep driving toward the chapel, where the zombies meet, until at least 4 zombies are in the
+  // near and middle view, so the screenshot shows a group.
   await expect
     .poll(
       async () => {
@@ -87,6 +87,7 @@ test("zombies appear between the graves and walk to the chapel", async ({
       { timeout: 90_000 },
     )
     .toBeGreaterThanOrEqual(4);
+  await page.keyboard.up("ArrowUp");
   await page.waitForTimeout(1500);
   await page.screenshot({
     path: `test-results/screens/${testInfo.project.name}-zombies.png`,
