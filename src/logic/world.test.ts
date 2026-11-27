@@ -74,8 +74,6 @@ describe("stepWorld", () => {
   });
 
   it("never has more walking zombies than the maximum", () => {
-    // Fast spawn is not possible with the base interval, so a long run with a blocked chapel path is not needed:
-    // check the bound on a long run.
     let world = createWorld(map);
     const rng = createRandom(3);
     for (let i = 0; i < 60 * 200; i += 1) {
@@ -98,6 +96,17 @@ describe("stepWorld", () => {
       }
     }
     expect(seen).toBeGreaterThan(0);
+  });
+
+  it("does not save up spawns when no spawn point is free", () => {
+    const empty = { ...map, spawnPoints: [] };
+    const rng = createRandom(4);
+    const waited = run(createWorld(empty), CONFIG.spawn.baseInterval * 3, rng);
+    expect(waited.zombies).toHaveLength(0);
+    expect(waited.spawnTimer).toBe(0);
+    const open = stepWorld({ ...waited, map }, NO_INPUT, STEP, rng);
+    expect(open.zombies).toHaveLength(1);
+    expect(open.spawnTimer).toBeGreaterThan(CONFIG.spawn.baseInterval - 0.1);
   });
 
   it("gives the same world for the same seed", () => {
