@@ -330,14 +330,16 @@ async function createBox(create: () => Promise<sandcastle.Sandbox>): Promise<san
 }
 
 // Visual judge: a separate read-only agent. It takes screenshots, compares them with the
-// targets and writes .sandcastle/context/judge.md. A judge commit is removed.
+// targets and writes test-results/judge/verdict.md (git-ignored). A judge commit is removed.
 async function runJudge(
   sandbox: sandcastle.Sandbox,
   args: Record<string, string>,
   round: number,
 ) {
   const before = (await sandbox.exec("git rev-parse HEAD")).stdout.trim();
-  await sandbox.exec("mkdir -p .sandcastle/context && rm -f .sandcastle/context/judge.md");
+  await sandbox.exec(
+    "mkdir -p test-results/judge && rm -f test-results/judge/verdict.md .sandcastle/context/judge.md",
+  );
   await runPhase(sandbox, {
     name: `judge-${round}`,
     maxIterations: 1,
@@ -349,7 +351,12 @@ async function runJudge(
     console.log(`The judge made a commit. Remove it (the judge is read-only).`);
     await sandbox.exec(`git reset --hard ${before}`);
   }
-  const text = (await sandbox.exec("cat .sandcastle/context/judge.md 2>/dev/null || true")).stdout;
+  // The judge writes test-results/judge/verdict.md (.claude/settings.json blocks writes in .sandcastle/).
+  const text = (
+    await sandbox.exec(
+      "cat test-results/judge/verdict.md 2>/dev/null || cat .sandcastle/context/judge.md 2>/dev/null || true",
+    )
+  ).stdout;
   const verdict = parseJudgeVerdict(text);
   if (currentIssue)
     spawnSync(

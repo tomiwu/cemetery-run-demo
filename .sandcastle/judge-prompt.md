@@ -9,7 +9,7 @@ Another agent wrote the code. You do not write code. You only look and judge.
 
 # Rules
 
-- Read-only. Do not edit, create or delete files in the repository, except `.sandcastle/context/judge.md` and files in `test-results/`. Do not commit. Do not push. Do not comment on GitHub (the host posts your verdict).
+- Read-only. Do not edit, create or delete files in the repository, except files in `test-results/` (git-ignored). Do not commit. Do not push. Do not comment on GitHub (the host posts your verdict).
 - Judge what you SEE in the screenshots, not what the code says.
 
 # Steps
@@ -20,7 +20,7 @@ Another agent wrote the code. You do not write code. You only look and judge.
 4. Compare each screenshot with its target, model by model: hearse, graves and candles, chapel, wall and gate, trees, zombies (if the game has them), ground and path, sky, fog and light, camera angle, HUD. Check each "Visual match" acceptance criterion of the issue.
 5. Read `test-results/judge/track.json`: the hearse must never pass through a solid obstacle.
    If the issue has a "Playtest" criterion: also run `node .sandcastle/playtest.mjs test-results/playtest http://localhost:4173/cemetery-run-demo/` (Playwright video in `test-results/playtest/video/`, track in `test-results/playtest/track.json`). Open a few frames of the run and compare the track with the numbers of the issue and of `docs/playtest/README.md` (speed kept after a wall hit by angle, no sticky contact: no run of more than 3 samples at speed 0 while a key is held, graves break and the hearse drives on). Write each miss as a gap.
-6. Write `.sandcastle/context/judge.md`:
+6. Write the verdict file `test-results/judge/verdict.md` (exactly this path; the host reads it):
 
 ```
 VERDICT: PASS | FAIL
