@@ -27,7 +27,14 @@ VERDICT: PASS | FAIL
 - gap: <what differs from the target, where (screenshot name)> -> <concrete fix in the model or render code>
 ```
 
-Write FAIL when any "Visual match" criterion is not met, or a model reads clearly different from the target (shape, size, colour, light). Order the gaps by visual impact, biggest first. At most 12 gaps. Be concrete (sizes, colours as hex, counts). Write PASS only when the look is close to the targets for this issue's scope.
+Mark each gap `[major]` or `[minor]`:
+
+- `[major]`: a model or element reads as a different thing than in the target (for example the hearse reads as a box or van), an element the issue needs is missing or unreadable on a phone screen, the palette or light is clearly off (for example no dusk sky), or a "Visual match" criterion of the issue is not met.
+- `[minor]`: polish (exact hex values, small sizes, a few more props, texture detail, fog amount).
+
+Write `VERDICT: FAIL` only when at least one `[major]` gap is left. Otherwise write `VERDICT: PASS` and still list the `[minor]` gaps (the host posts them for later polish). Order the gaps by visual impact, biggest first; at most 12; be concrete (sizes, hex colours, counts). Use the format `- gap: [major] <what, where> -> <fix>`.
+
+Gameplay rules win over the look. Do not ask for changes that break `docs/PRD.md`: grave spacing (section 3 and D22: centres at least 5.0 m in a row and 5.5 m between rows), road and path widths needed to drive, the camera rule D16 and the draw-call limits. Inside those rules, "dense" means more props in the free space (candles, flowers, small stones, fog), not graves closer together.
 
 When you are done, output:
 
