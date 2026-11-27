@@ -15,7 +15,6 @@ import {
   PlaneGeometry,
   Scene,
   SphereGeometry,
-  SpotLight,
   Vector3,
   type WebGLRenderer,
 } from "three";
@@ -24,17 +23,18 @@ import { CONFIG } from "../config";
 import type { HearseState } from "../logic/hearse";
 import { buildHearse } from "./hearse";
 import { skyDome } from "./intro";
+import { PALETTE } from "./palette";
 
 /** Night colours. The ground is the surface colour of the palette (PRD section 6). */
-const GROUND_COLOR = "#242220";
-const PATH_COLOR = "#4a3d2e";
-const FOG_COLOR = "#5a4f58";
+const GROUND_COLOR = PALETTE.grassDark;
+const PATH_COLOR = PALETTE.pathShadow;
+const FOG_COLOR = PALETTE.gameFog;
 /** Dusk sky (VISUAL_REFERENCE.md): warm glow low, blue-grey high. */
-const SKY_LOW = "#b9804f";
-const SKY_HIGH = "#3c3f4e";
-const MOON_COLOR = 0xa9b4d6;
-const HEADLIGHT_COLOR = 0xffd58a;
-const CANDLE_COLOR = 0xf2b45a;
+const SKY_LOW = PALETTE.horizonGlow;
+const SKY_HIGH = PALETTE.skyTop;
+const MOON_COLOR = PALETTE.moon;
+
+const CANDLE_COLOR = PALETTE.candle;
 
 const LOOK_HEIGHT = 1.1;
 const SHADOW_SIZE = 16;
@@ -163,10 +163,6 @@ export function createGameScene(
   moon.shadow.bias = -0.0004;
   scene.add(moon, moon.target);
 
-  // Warm light cone in front of the hearse.
-  const headlights = new SpotLight(HEADLIGHT_COLOR, 420, 34, 0.75, 0.7, 1.4);
-  scene.add(headlights, headlights.target);
-
   const hearse = buildHearse();
   hearse.group.traverse((object) => {
     if (object instanceof Mesh) {
@@ -232,10 +228,6 @@ export function createGameScene(
     }
     moon.position.set(state.x, 0, state.z).add(MOON_OFFSET);
     moon.target.position.set(state.x, 0, state.z);
-    const sin = Math.sin(state.heading);
-    const cos = Math.cos(state.heading);
-    headlights.position.set(state.x + sin * 2.4, 0.8, state.z + cos * 2.4);
-    headlights.target.position.set(state.x + sin * 12, 0, state.z + cos * 12);
     focus.set(state.x, LOOK_HEIGHT, state.z);
   }
 

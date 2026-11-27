@@ -25,14 +25,14 @@ function triangles(root: Object3D): number {
 describe("buildHearse", () => {
   const hearse = buildHearse();
 
-  it("uses fewer than 2000 triangles", () => {
-    expect(triangles(hearse.group)).toBeLessThan(2000);
+  it("uses fewer than 3000 triangles", () => {
+    expect(triangles(hearse.group)).toBeLessThan(3000);
   });
 
-  it("is about 5.2 m long and points to +z", () => {
+  it("is about 5.4 m long and points to +z", () => {
     const size = new Box3().setFromObject(hearse.group).getSize(new Vector3());
-    expect(size.z).toBeGreaterThan(5.1);
-    expect(size.z).toBeLessThan(5.4);
+    expect(size.z).toBeGreaterThan(5.2);
+    expect(size.z).toBeLessThan(5.6);
     expect(size.x).toBeLessThan(size.z);
   });
 
@@ -60,5 +60,43 @@ describe("buildHearse", () => {
 
   it("builds a new model on each call", () => {
     expect(buildHearse().group).not.toBe(hearse.group);
+  });
+});
+
+describe("buildHearse look", () => {
+  const hearse = buildHearse();
+
+  it("has a glossy black body with a sky reflection", () => {
+    const body = hearse.group.getObjectByName("body") as Mesh;
+    const paint = body.material as MeshStandardMaterial;
+    expect(paint.roughness).toBeCloseTo(0.25, 1);
+    expect(paint.metalness).toBeCloseTo(0.6, 1);
+    expect(paint.envMap).not.toBeNull();
+    expect(paint.color.getHexString()).toBe("0e0e0f");
+  });
+
+  it("has one spot light for the headlight cone", () => {
+    let spots = 0;
+    hearse.group.traverse((object) => {
+      if (object.type === "SpotLight") {
+        spots += 1;
+      }
+    });
+    expect(spots).toBe(1);
+  });
+
+  it("has a long high roof: tall at the rear, with a low bonnet", () => {
+    const box = new Box3().setFromObject(hearse.group);
+    expect(box.max.y).toBeGreaterThan(1.55);
+    expect(box.max.y).toBeLessThan(1.7);
+    const bonnet = new Box3().setFromObject(
+      hearse.group.getObjectByName("headlight") as Object3D,
+    );
+    expect(bonnet.max.y).toBeLessThan(0.9);
+  });
+
+  it("has cream curtains and chrome", () => {
+    expect(hearse.group.getObjectByName("curtain")).toBeDefined();
+    expect(hearse.group.getObjectByName("chrome")).toBeDefined();
   });
 });
