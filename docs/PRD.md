@@ -40,6 +40,8 @@ The game is a demo. It shows no names: no company, no town, no person, no phone 
 | PS7 | Publish | Tomasz allowed the publish to GitHub Pages. A deploy workflow runs on each push to main. Pages source: GitHub Actions. URL: https://tomiwu.github.io/cemetery-run-demo/ |
 | M1 | Merge rule | (Tomasz, t5u, 2026-11-26) The loop squash-merges each PR by itself with `--match-head-commit`, but ONLY when every required CI job has conclusion `success`. Otherwise the PR stays open with label `needs-validation`. |
 | M2 | Agent | Claude Code, latest Sonnet (`claude-sonnet-5-5`), writes and reviews the code in the Sandcastle loop on the box. No Cursor cloud agents. |
+| D19 | Breakable graves | (Tomasz, t16u) Graves break on a hit and do not stop the hearse; a short speed penalty. Trees, walls and the chapel bounce softly. Wider grave spacing. See section 3. |
+| D20 | Power-ups | (Tomasz, t16u) Mystery "?" boxes give a random power-up for a few seconds: boost/drift and flamethrower first. HUD icon. See section 3. |
 | M3 | Visual judge | (Tomasz, t15u, 2026-11-27) The agent that writes the code does not judge its own look. A separate read-only visual judge agent (`claude-opus-5-5`, effort `high`, set by `JUDGE_MODEL` and `EFFORT_JUDGE`) runs for each UI issue (label `visual` or `ui`, a "Visual match" criterion, or a change in `src/render/`, `src/ui/`, CSS, `index.html` or `public/`). It takes Playwright portrait screenshots (`.sandcastle/visual-shots.mjs`), compares them with `docs/targets/` and `docs/ref/`, and writes `VERDICT: PASS` or `FAIL` and a gap list. On FAIL, a visual fixer (the code agent) fixes the gaps, the checks run, and the judge looks again (up to 3 rounds). Still FAIL: the PR stays open with `needs-validation`; the loop does not merge it. The judge posts each verdict as an issue comment. |
 | M4 | Own podman store | (2026-11-27) The loop uses its own podman store `/workspace/cemetery-run-demo-podman` (wrapper in its `bin/`, written by `scripts/start-loop.sh`). Reason: after the box reboot on 2026-11-27 the shared store lost layer data. Other projects do not use this store. |
 | V1 | Versions | Newest stable on 2026-11-26, with two exceptions: TypeScript 6.0.3 (typescript-eslint 8.74.0 supports `<6.1.0`, so not TypeScript 7.0.2), and Playwright 1.65.1 (the same version as the Chromium in the loop image). |
@@ -52,7 +54,11 @@ The game is a demo. It shows no names: no company, no town, no person, no phone 
 - Zombies spawn at spawn points between the graves, never on the road in front of the hearse, and never within 6 m of the hearse.
 - Zombies walk toward the chapel along a simple path (straight line with small side steps around graves). No path-finding library.
 - Hit: the hearse hits a zombie when the distance between their circles is less than the sum of their radii and the hearse speed is above a small minimum.
-- Obstacles: gravestones, trees and walls block the hearse (simple circle and box collision). A hit on an obstacle stops the hearse; it does not damage it.
+- Obstacles (Tomasz, t16u, 2026-11-27, replaces "a hit stops the hearse"):
+  - Graves do NOT stop the hearse. A grave hit at 2 m/s or more breaks the grave into cartoon stone pieces and dust (no gore), the hearse loses about 30 % of its speed for 0.5 s, and it drives on. A broken grave stays as low rubble (no collision) for the rest of the round. Slower than 2 m/s: the hearse pushes against the grave and slides around it.
+  - Trees, walls, the gate and the chapel stay solid. The hearse bounces off softly (keeps the tangent speed, a small rebound), it never stops dead and never sticks.
+  - The graves stand wider apart, so that the hearse can drive between grave rows.
+- Power-ups (Tomasz, t16u, 2026-11-27): mystery boxes ("?" boxes, like in kart racers) appear on the map. Driving through a box gives one random power-up for a few seconds; one power-up at a time. First power-ups: boost (more top speed and a drift with tighter turns) and flamethrower (cartoon flames in front of the hearse pop zombies in a short cone, no gore). The HUD shows an icon of the active power-up and its time left.
 - The hearse cannot leave the cemetery walls.
 - All numbers above are in `src/config.ts`. Tests use those values.
 
