@@ -20,7 +20,10 @@ if (!canvas || !ui) {
 }
 
 const renderer = new WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// `?test=1` draws at pixel ratio 1: software WebGL in CI is too slow at a higher ratio.
+const testMode =
+  new URLSearchParams(window.location.search).get("test") === "1";
+renderer.setPixelRatio(testMode ? 1 : Math.min(window.devicePixelRatio, 2));
 
 const intro = createIntroScene();
 const map = buildMap(CONFIG.map);
