@@ -27,7 +27,7 @@ renderer.setPixelRatio(testMode ? 1 : Math.min(window.devicePixelRatio, 2));
 
 const intro = createIntroScene();
 const map = buildMap(CONFIG.map);
-const game = createGameScene(renderer, import.meta.env.BASE_URL, map);
+const game = createGameScene(renderer, map);
 let gameLoaded = false;
 game.loaded
   .then(() => {

@@ -18,21 +18,34 @@ import type { HearseState } from "../logic/hearse";
 import type { CemeteryMap } from "../logic/map";
 import { buildHearse } from "./hearse";
 import { skyDome } from "./intro";
-import { buildMapScene } from "./map";
+import { createRandom } from "../logic/random";
+import { buildBuildings } from "./buildings";
+import { patches, type Spot } from "./glow";
+import {
+  buildGraves,
+  lanternMeshes,
+  pumpkinMesh,
+  type Lantern,
+} from "./graves";
+import { groundGeometry } from "./landscape";
+import { buildTrees } from "./trees";
 import { createZombieLayer } from "./zombies";
 import type { Zombie } from "../logic/zombies";
 import { PALETTE } from "./palette";
 
-/** Night colours. The ground is the surface colour of the palette (PRD section 6). */
-const GROUND_COLOR = PALETTE.mapGrass;
-const FOG_COLOR = PALETTE.gameFog;
-/** Dusk sky (VISUAL_REFERENCE.md): warm glow low, blue-grey high. */
-const SKY_LOW = PALETTE.horizonGlow;
-const SKY_HIGH = PALETTE.skyTop;
+/** Dusk colours (VISUAL_REFERENCE.md): grass ground, amber glow low in the sky, blue-grey high. */
+const GROUND_COLOR = PALETTE.grassOlive;
+const FOG_COLOR = "#6F5F5E";
 const MOON_COLOR = PALETTE.moon;
 
 const LOOK_HEIGHT = 1.1;
-const SHADOW_SIZE = 16;
+/**
+ * Side shift of the view axis, as a share of the camera side offset. The full value
+ * (-lookAhead / offset.z) puts the hearse on the axis. A little less keeps the hearse a bit
+ * left of the middle of the screen, like in the target image.
+ */
+const LOOK_SIDE = (-CONFIG.camera.lookAhead / CONFIG.camera.offset.z) * 0.85;
+const SHADOW_SIZE = 18;
 const MOON_OFFSET = new Vector3(-14, 26, 10);
 
 export interface GameScene {
@@ -53,7 +66,6 @@ export interface GameScene {
 
 export function createGameScene(
   renderer: WebGLRenderer,
-  baseUrl: string,
   map: CemeteryMap,
 ): GameScene {
   renderer.shadowMap.enabled = true;
@@ -61,36 +73,91 @@ export function createGameScene(
 
   const scene = new Scene();
   scene.background = new Color(FOG_COLOR);
-  scene.fog = new Fog(FOG_COLOR, 22, 80);
+  scene.fog = new Fog(FOG_COLOR, 38, 130);
   const camera = new PerspectiveCamera(CONFIG.camera.fov, 1, 0.5, 300);
 
-  const sky = skyDome(new Color(SKY_LOW), new Color(SKY_HIGH), 0.35);
+  // Dusk sky: amber at the horizon, mauve, then blue-grey.
+  const sky = skyDome(
+    new Color(PALETTE.haze),
+    new Color(PALETTE.skyTop),
+    0.4,
+    new Color(PALETTE.skyMiddle),
+    new Color(PALETTE.horizonGlow),
+  );
   scene.add(sky);
 
+  // Grass far away, and the fine ground with the dirt paths near the walls.
+  const outer = new Mesh(
+    new PlaneGeometry(900, 900),
+    new MeshStandardMaterial({ color: PALETTE.grassOlive, roughness: 1 }),
+  );
+  outer.name = "ground-far";
+  outer.rotation.x = -Math.PI / 2;
+  outer.position.y = -0.03;
+  outer.receiveShadow = true;
+  scene.add(outer);
   const ground = new Mesh(
-    new PlaneGeometry(600, 600),
+    groundGeometry(map.roads),
     new MeshStandardMaterial({
+      vertexColors: true,
       color: GROUND_COLOR,
       roughness: 1,
       flatShading: true,
     }),
   );
+  ground.material.color.set("#ffffff");
   ground.name = "ground";
-  ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   scene.add(ground);
 
-  const mapScene = buildMapScene(map, baseUrl);
-  scene.add(mapScene.group);
+  const buildings = buildBuildings(map);
+  scene.add(buildings.group);
+  const graves = buildGraves(map.graves, CONFIG.map.seed + 31);
+  scene.add(graves.group);
+  scene.add(pumpkinMesh(map.pumpkins));
+  scene.add(buildTrees(map, CONFIG.map.seed + 61));
 
-  const zombieLayer = createZombieLayer(baseUrl);
+  // Candle lanterns on the graves and at the chapel door (the candle slots of the map).
+  const lanterns: Lantern[] = [
+    ...graves.lanterns,
+    ...map.candleSlots.map((slot, index) => ({
+      x: slot.x,
+      z: slot.z,
+      red: index % 2 === 0,
+      size: 1.5,
+    })),
+  ];
+  scene.add(lanternMeshes(lanterns, true));
+
+  // Low ground fog between the graves.
+  const fogRandom = createRandom(CONFIG.map.seed + 77);
+  const fogSpots: Spot[] = [];
+  for (let i = 0; i < 46; i += 1) {
+    fogSpots.push({
+      x: (fogRandom() - 0.5) * 2 * (map.bounds.maxX + 6),
+      y: 0.35 + fogRandom() * 0.5,
+      z: (fogRandom() - 0.5) * 2 * (map.bounds.maxZ + 6),
+      size: 9 + fogRandom() * 9,
+    });
+  }
+  const groundFog = patches(fogSpots, {
+    color: "#8E96A8",
+    opacity: 0.18,
+    additive: false,
+    power: 1.2,
+  });
+  groundFog.name = "ground-fog";
+  scene.add(groundFog);
+
+  const zombieLayer = createZombieLayer();
   scene.add(zombieLayer.group);
 
-  scene.add(new AmbientLight(0x8a8590, 2));
-  scene.add(new HemisphereLight(0x9a93a0, 0x4a3f33, 2));
+  // Cool blue fill from the sky, a warm ground bounce.
+  scene.add(new AmbientLight(0x7a7f9c, 0.8));
+  scene.add(new HemisphereLight(0x8fa0cc, 0x4a3f33, 1.2));
 
   // Cold moonlight. Only the hearse and the chapel cast a shadow.
-  const moon = new DirectionalLight(MOON_COLOR, 2.2);
+  const moon = new DirectionalLight(MOON_COLOR, 1.3);
   moon.castShadow = true;
   moon.shadow.mapSize.set(1024, 1024);
   moon.shadow.camera.left = -SHADOW_SIZE;
@@ -106,6 +173,13 @@ export function createGameScene(
   hearse.group.traverse((object) => {
     if (object instanceof Mesh) {
       object.castShadow = true;
+      // The glossy paint shows more of the dusk sky from above (roof and bonnet).
+      if (object.name === "body") {
+        const paint = object.material as MeshStandardMaterial;
+        paint.envMapIntensity = 3.6;
+        paint.metalness = 0.9;
+        paint.color.set(PALETTE.hearseSheen);
+      }
     }
   });
   scene.add(hearse.group);
@@ -116,6 +190,7 @@ export function createGameScene(
     CONFIG.camera.offset.z,
   );
   const focus = new Vector3();
+  const anchor = new Vector3();
   const wanted = new Vector3();
   let wheelAngle = 0;
 
@@ -128,7 +203,13 @@ export function createGameScene(
     }
     moon.position.set(state.x, 0, state.z).add(MOON_OFFSET);
     moon.target.position.set(state.x, 0, state.z);
-    focus.set(state.x, LOOK_HEIGHT, state.z);
+    anchor.set(state.x, 0, state.z);
+    // The camera looks a little ahead (north) of the hearse, so the sky and tree line show.
+    focus.set(
+      state.x + CONFIG.camera.offset.x * LOOK_SIDE,
+      LOOK_HEIGHT,
+      state.z - CONFIG.camera.lookAhead,
+    );
   }
 
   function pointCamera(): void {
@@ -143,7 +224,7 @@ export function createGameScene(
   ): void {
     placeHearse(state, frameSeconds);
     zombieLayer.update(zombies, frameSeconds);
-    wanted.copy(focus).add(offset);
+    wanted.copy(anchor).add(offset);
     const k = 1 - Math.exp(-CONFIG.camera.follow * Math.max(0, frameSeconds));
     camera.position.lerp(wanted, k);
     pointCamera();
@@ -151,7 +232,7 @@ export function createGameScene(
 
   function snap(state: HearseState): void {
     placeHearse(state, 0);
-    camera.position.copy(focus).add(offset);
+    camera.position.copy(anchor).add(offset);
     pointCamera();
   }
 
@@ -170,8 +251,6 @@ export function createGameScene(
   }
 
   snap({ ...map.hearseStart, speed: 0 });
-  const loaded = Promise.all([mapScene.loaded, zombieLayer.loaded]).then(
-    () => undefined,
-  );
+  const loaded = zombieLayer.loaded;
   return { scene, camera, loaded, update, snap, resize };
 }

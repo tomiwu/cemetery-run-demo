@@ -99,7 +99,7 @@ export const CONFIG = {
     /** Longest logic step in seconds. */
     maxStepSeconds: 0.1,
     /** Height of the drawn zombie in metres. */
-    height: 1.7,
+    height: 1.6,
   },
   /** Fixed logic step in seconds (60 steps per second). */
   logicStepSeconds: 1 / 60,
@@ -107,8 +107,10 @@ export const CONFIG = {
   maxStepsPerFrame: 5,
   /** Chase camera. */
   camera: {
-    /** Offset from the hearse in metres. The world direction is fixed. */
-    offset: { x: 0, y: 9, z: 11 },
+    /** Offset from the hearse in metres (about 40 degrees down). The world direction is fixed. */
+    offset: { x: 3, y: 9.5, z: 10 },
+    /** The camera looks at a point this far in front of the hearse (north), so the sky shows. */
+    lookAhead: 6,
     /** Follow speed. A higher value follows closer (1/s). */
     follow: 5,
     /** Smallest vertical view angle in degrees, and the narrowest side view angle. */

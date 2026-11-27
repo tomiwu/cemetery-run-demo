@@ -27,6 +27,8 @@ export const PALETTE = {
   candleGlow: "#AC7D4F",
   hearseBody: "#0E0E0F",
   hearseHighlight: "#5A5354",
+  /** Derived: paint colour of the game hearse. It is lighter, so the sky shows on the roof. */
+  hearseSheen: "#3E3E45",
   curtain: "#E8E0CF",
   glass: "#1C1E22",
   headlight: "#FFD58A",
@@ -63,6 +65,27 @@ export const PALETTE = {
   mapRoad: "#3A3734",
   /** Derived: bare earth of the graves. */
   mapEarth: "#4A4034",
+  /** Game look pass 2 (derived from the target images): grass, dirt, stone, brick, skin. */
+  grassOlive: "#2F3A1F",
+  grassOliveLight: "#43512B",
+  pathDirt: "#8A6E4B",
+  pathDirtLight: "#A88B63",
+  pathDirtWarm: "#A8652F",
+  stoneGrey: "#B9B4AA",
+  stoneBeige: "#CFC6B4",
+  stoneBase: "#8C867C",
+  chapelBrick: "#7A3B2E",
+  chapelRoofDark: "#2B2628",
+  poplar: "#27351F",
+  poplarLight: "#34452A",
+  treeLine: "#1C261A",
+  candleRed: "#B8382C",
+  candleWhite: "#EFE6D2",
+  flame: "#FFD58A",
+  zombieSkin: "#8FA27A",
+  zombieShirtGrey: "#6E6F6A",
+  zombieShirtBrown: "#6B5642",
+  zombiePants: "#4A453D",
   /** UI palette (Candle Graphite). */
   uiBackground: "#161513",
 } as const;
