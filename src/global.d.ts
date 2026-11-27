@@ -6,5 +6,7 @@ interface Window {
     introProgress: () => number;
     /** Hold the intro at a progress value (0..1), or release it with null. */
     freezeIntro: (progress: number | null) => void;
+    /** Hearse state: position in metres, heading in radians, speed in m/s. */
+    hearse: () => { x: number; z: number; heading: number; speed: number };
   };
 }
