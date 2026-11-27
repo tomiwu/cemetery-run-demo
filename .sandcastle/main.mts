@@ -42,6 +42,10 @@ import { join } from "node:path";
 import {
   type CiJob,
   CLAUDE_LIMIT,
+  IMAGE_CHECK_RETRIES,
+  IMAGE_CREATE_ERROR,
+  classifyImageCheck,
+  imageRecoveryStep,
   NETWORK_ERROR,
   containerNameOf,
   EventDeduper,
@@ -242,6 +246,67 @@ async function safeClose(box: sandcastle.Sandbox): Promise<void> {
     await sleepUntil(Date.now() + 3_000);
     const rm = spawnSync("podman", ["rm", "-f", name], { encoding: "utf8", timeout: 60_000 });
     console.log(`Forced removal of ${name}: exit ${rm.status ?? "timeout"}.`);
+  }
+}
+
+// Make sure our image exists before a sandbox starts. Retry a transient inspect
+// error; rebuild ONLY our own tag (from .sandcastle/Containerfile) when it is really
+// gone and the disk has room. Never touch other tags.
+const IMAGE_WAIT_SECONDS = Number(process.env.IMAGE_WAIT_SECONDS ?? "30");
+const REBUILD_MIN_FREE_GB = Number(process.env.REBUILD_MIN_FREE_GB ?? "6");
+async function ensureImage(): Promise<void> {
+  let rebuilt = false;
+  for (let attempt = 0; ; attempt++) {
+    const r = spawnSync("podman", ["image", "inspect", "--format", "{{.Id}}", IMAGE], {
+      encoding: "utf8",
+      timeout: 120_000,
+    });
+    const check = classifyImageCheck(r.status, `${r.stderr ?? ""}${r.error ?? ""}`);
+    const step = imageRecoveryStep(check, attempt % IMAGE_CHECK_RETRIES, rebuilt);
+    if (step === "use") return;
+    console.log(`Image ${IMAGE}: ${check} (check ${attempt + 1}): ${`${r.stderr ?? ""}`.trim().slice(0, 200)}`);
+    if (step === "wait") {
+      await sleepUntil(Date.now() + IMAGE_WAIT_SECONDS * 1000);
+      continue;
+    }
+    if (step === "rebuild") {
+      const freeGb = Number(
+        spawnSync("df", ["-BG", "--output=avail", "/"], { encoding: "utf8" })
+          .stdout.replace(/[^0-9\n]/g, "")
+          .trim()
+          .split("\n")
+          .pop() ?? "0",
+      );
+      if (freeGb < REBUILD_MIN_FREE_GB) {
+        throw new Error(`Image ${IMAGE} is missing and only ${freeGb} GB is free. No rebuild.`);
+      }
+      console.log(`Rebuild ${IMAGE} from .sandcastle/Containerfile (${freeGb} GB free).`);
+      const b = spawnSync(
+        "podman",
+        ["build", "-t", IMAGE, "-f", ".sandcastle/Containerfile", ".sandcastle"],
+        { stdio: "inherit", timeout: 60 * 60_000 },
+      );
+      rebuilt = true;
+      console.log(`Rebuild exit ${b.status ?? "timeout"}.`);
+      attempt = -1; // check again from the start
+      continue;
+    }
+    throw new Error(`Image ${IMAGE} is not usable after ${attempt + 1} checks (${check}).`);
+  }
+}
+
+// Create a sandbox. An "image not found" create error (also a transient podman error)
+// gets an image check and one more try, not a crash.
+async function createBox(create: () => Promise<sandcastle.Sandbox>): Promise<sandcastle.Sandbox> {
+  await ensureImage();
+  try {
+    return await create();
+  } catch (error) {
+    if (!IMAGE_CREATE_ERROR.test(`${error}`)) throw error;
+    console.log(`Sandbox create failed (image): ${`${error}`.slice(0, 200)}. Check the image and try again.`);
+    await sleepUntil(Date.now() + IMAGE_WAIT_SECONDS * 1000);
+    await ensureImage();
+    return await create();
   }
 }
 
@@ -620,12 +685,12 @@ async function waitCiWithFixes(
     console.log(`CI failed for ${url}. Fixer attempt ${attempt + 1}.`);
     spawnSync("git", ["fetch", "origin", branch]);
     spawnSync("git", ["branch", "-f", branch, `origin/${branch}`]);
-    const fixBox = await sandcastle.createSandbox({
+    const fixBox = await createBox(() => sandcastle.createSandbox({
       branch,
       baseBranch: `origin/${BASE_BRANCH}`,
       sandbox: podman({ imageName: IMAGE }),
       hooks,
-    });
+    }));
     try {
       await runPhase(fixBox, {
         name: `ci-fixer-${attempt + 1}`,
@@ -723,12 +788,12 @@ async function mainLoop(): Promise<void> {
     );
     let passed = false;
     let commits = 0;
-    const sandbox = await sandcastle.createSandbox({
+    const sandbox = await createBox(() => sandcastle.createSandbox({
       branch,
       baseBranch: `origin/${BASE_BRANCH}`,
       sandbox: podman({ imageName: IMAGE }),
       hooks,
-    });
+    }));
     try {
       const implement = await runPhase(sandbox, {
         name: "implementer",

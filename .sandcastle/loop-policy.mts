@@ -303,3 +303,28 @@ export function containerNameOf(text: string): string | undefined {
     text,
   )?.[0];
 }
+
+// ---------------------------------------------------------------------------
+// Image check (cemetery-run-demo, 2026-11-27). Sandcastle reports ANY error of
+// `podman image inspect` as "not found locally". A storage lock or a busy podman
+// gives the same text. So: classify the inspect result, wait and retry, and
+// rebuild only our own tag when the image is really gone after all retries.
+// ---------------------------------------------------------------------------
+export type ImageCheck = "ok" | "missing" | "transient";
+export function classifyImageCheck(exitCode: number | null, stderr: string): ImageCheck {
+  if (exitCode === 0) return "ok";
+  if (/image not known|no such image|image not found/i.test(stderr)) return "missing";
+  return "transient";
+}
+
+export const IMAGE_CHECK_RETRIES = 5;
+export type ImageStep = "use" | "wait" | "rebuild" | "give-up";
+// attempt: 0-based number of the check. rebuilt: a rebuild was already tried.
+export function imageRecoveryStep(check: ImageCheck, attempt: number, rebuilt: boolean): ImageStep {
+  if (check === "ok") return "use";
+  if (attempt + 1 < IMAGE_CHECK_RETRIES) return "wait";
+  if (check === "missing" && !rebuilt) return "rebuild";
+  return "give-up";
+}
+
+export const IMAGE_CREATE_ERROR = /not found locally|image not known|no such image/i;

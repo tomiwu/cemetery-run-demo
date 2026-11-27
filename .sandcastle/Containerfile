@@ -1,7 +1,7 @@
 # Sandcastle image for cemetery-run-demo.
 # Tag: localhost/sandcastle:cemetery-run-demo
-# 2026-11-26: the loop reuses the image built from this same file for another static-site loop
-# (same Node 26, gh, Claude Code 2.1.332, Playwright 1.65.1 Chromium). The tag points to that image ID.
+# 2026-11-27: our tag is a label-only image FROM the shared static-site image (own image ID,
+# shared layers). The loop rebuilds this tag from this file only if the image is really gone.
 # Rebuild only when a version here changes, and only after a free-disk check.
 # Contains every CI tool: Node LTS, git, gh, Claude Code, Playwright Chromium (+ system deps).
 # Do not build this image while another loop image is building.
