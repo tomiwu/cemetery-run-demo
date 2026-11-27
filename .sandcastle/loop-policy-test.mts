@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   EventDeduper,
+  ciStateOf,
   judgeNextStep,
   needsVisualJudge,
   parseJudgeVerdict,
@@ -303,6 +304,22 @@ check(
   const r = redactSecrets(`podman run -d -e GH_TOKEN=${tok} -e PROJECT=x -w /home ${tok}`);
   check("redact: env values and tokens are removed", !r.includes(tok) && !r.includes("=x ") && r.includes("-e GH_TOKEN=***"));
 }
+
+// CI head race: the old failed head must not count after a push.
+check(
+  "ci: old PR head after a push -> pending",
+  ciStateOf("old", "new", [{ status: "completed", conclusion: "failure" }]) === "pending",
+);
+check(
+  "ci: pushed head with a running run -> pending; done -> success",
+  ciStateOf("new", "new", [{ status: "in_progress", conclusion: "" }]) === "pending" &&
+    ciStateOf("new", "new", [{ status: "completed", conclusion: "success" }]) === "success",
+);
+check(
+  "ci: no expected head -> plain state; no runs -> none",
+  ciStateOf("a", undefined, [{ status: "completed", conclusion: "failure" }]) === "failure" &&
+    ciStateOf("a", "a", []) === "none",
+);
 
 if (fails) {
   console.log(`\n${fails} loop-policy test(s) failed.`);
