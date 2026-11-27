@@ -21,6 +21,8 @@ import {
   effortFor,
   isFormatOnlyFailure,
   limitWait,
+  freshLogText,
+  CLAUDE_LIMIT,
   nextAgentAfterStall,
   parseResetAt,
   phaseOfName,
@@ -48,9 +50,24 @@ check(
   iso(parseResetAt(msg, now)),
 );
 check(
-  "reset: 3:30am (UTC) is tomorrow",
-  iso(parseResetAt("resets 3:30am (UTC)", now)) === "2026-11-14T03:30:00.000Z",
-  iso(parseResetAt("resets 3:30am (UTC)", now)),
+  "reset: 3:30am (UTC) at 23:00 is tomorrow (over midnight)",
+  iso(parseResetAt("resets 3:30am (UTC)", Date.UTC(2026, 10, 13, 23, 0))) ===
+    "2026-11-14T03:30:00.000Z",
+  iso(parseResetAt("resets 3:30am (UTC)", Date.UTC(2026, 10, 13, 23, 0))),
+);
+// 2026-11-27 12:22 UTC: old text "resets 12:20pm (UTC)" paused the loop until 18:22 next day.
+const late = Date.UTC(2026, 10, 27, 12, 22);
+const stale = "You've hit your 5-hour limit · resets 12:20pm (UTC)";
+check(
+  "reset: a past time today stays in the past (no roll to tomorrow)",
+  iso(parseResetAt(stale, late)) === "2026-11-27T12:20:00.000Z",
+  iso(parseResetAt(stale, late)),
+);
+check(
+  "wait: a past reset -> short fixed pause, not hours",
+  limitWait(stale, late, 30).untilMs === late + 30 * 60_000 &&
+    /past/.test(limitWait(stale, late, 30).reason),
+  limitWait(stale, late, 30).reason,
 );
 check(
   "reset: 18:50 Europe/Warsaw (CET, UTC+1)",
@@ -64,7 +81,8 @@ check(
 );
 check(
   "reset: 12am is midnight",
-  iso(parseResetAt("resets 12am (UTC)", now)) === "2026-11-14T00:00:00.000Z",
+  iso(parseResetAt("resets 12am (UTC)", Date.UTC(2026, 10, 13, 21, 0))) ===
+    "2026-11-14T00:00:00.000Z",
 );
 check(
   "reset: relative 'resets in 2 hours'",
@@ -100,6 +118,39 @@ check(
 check(
   "wait: capped at 6 h",
   limitWait("It resets in 3 days.", now, 30).untilMs === now + 6 * 3_600_000,
+);
+
+// Limit class: only the real "hit your ... limit" text.
+check(
+  "limit: 'hit your 5-hour limit' is a limit",
+  CLAUDE_LIMIT.test("You've hit your 5-hour limit · resets 6:30pm (UTC)") &&
+    CLAUDE_LIMIT.test("You've hit your limit"),
+);
+check(
+  "limit: podman/crun errors and other stall words are not a limit",
+  !CLAUDE_LIMIT.test(
+    'ExecError: error creating temporary file: No such file or directory crun: error opening file /tmp/xdg-runtime-box-47/crun/x',
+  ) &&
+    !CLAUDE_LIMIT.test("usage limit") &&
+    !CLAUDE_LIMIT.test("rate limit, try later") &&
+    !CLAUDE_LIMIT.test("overloaded"),
+);
+// Fresh log text: an old retry's limit line in the same log file is not seen.
+const oldLog = "visual-fixer-1 try 1\nYou've hit your 5-hour limit · resets 12:20pm (UTC)\n";
+const newLog = oldLog + "ExecError: crun: error opening file /tmp/x\n";
+check(
+  "log: only text after the attempt start",
+  freshLogText("a.log", newLog, { file: "a.log", size: oldLog.length }) ===
+    "ExecError: crun: error opening file /tmp/x\n" &&
+    !CLAUDE_LIMIT.test(
+      freshLogText("a.log", newLog, { file: "a.log", size: oldLog.length }),
+    ),
+);
+check(
+  "log: a new file or a shorter file is new in full; no file -> empty",
+  freshLogText("b.log", "x", { file: "a.log", size: 5 }) === "x" &&
+    freshLogText("a.log", "xy", { file: "a.log", size: 9 }) === "xy" &&
+    freshLogText(undefined, "", { size: 0 }) === "",
 );
 
 const chain = [

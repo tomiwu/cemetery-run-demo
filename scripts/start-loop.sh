@@ -34,6 +34,11 @@ if [ "$PODMAN_STORE" != "shared" ]; then
   cat > "$PODMAN_STORE/bin/podman" <<EOF
 #!/usr/bin/env bash
 # ${NAME} only: our own podman store, not the shared one (written by scripts/start-loop.sh).
+# Own XDG runtime dir (2026-11-27 14:40): the shared /tmp/xdg-runtime-* dir was recreated and
+# lost libpod/tmp/pause.pid, so every rootless podman call failed. Our own dir keeps our pause
+# process and crun state apart from other projects.
+export XDG_RUNTIME_DIR=/tmp/${NAME}-podman/xdg
+mkdir -p "\$XDG_RUNTIME_DIR/libpod/tmp" && chmod 700 "\$XDG_RUNTIME_DIR"
 exec /usr/bin/podman --root "$PODMAN_STORE/graph" --runroot /tmp/${NAME}-podman/run --tmpdir /tmp/${NAME}-podman/tmp "\$@"
 EOF
   chmod 755 "$PODMAN_STORE/bin/podman"

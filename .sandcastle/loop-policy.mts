@@ -17,8 +17,9 @@ export type Phase =
 
 // The Claude subscription limit is shared by all Claude models (Opus, Sonnet, Fable).
 // Text of a Claude limit: "You've hit your 5-hour limit · resets 6:30pm (UTC)".
-export const CLAUDE_LIMIT =
-  /hit your (?:[\w-]+ )?limit|usage limit|limit reached|rate limit|out of (?:extra )?usage/i;
+// Only this real text is a limit (2026-11-27): a podman/crun error with an old "usage limit"
+// line in the log tail paused the loop for 6 h. Other stall words get the short fixed pause.
+export const CLAUDE_LIMIT = /hit your (?:[\w-]+ )?limit/i;
 
 export const isClaudeLabel = (label: string) => /^Claude Code\b/.test(label);
 
@@ -73,8 +74,10 @@ function nextWallTime(
     ) - off;
   const off2 = zoneOffsetMs(guess, zone);
   if (off2 !== undefined && off2 !== off) guess += off - off2;
-  // A reset time in the past (more than 1 min ago) means the same time tomorrow.
-  return guess < nowMs - 60_000 ? guess + 24 * 3600_000 : guess;
+  // Past by more than 12 h: the clock went over midnight, so the reset is tomorrow
+  // (23:00 now, "resets 3:30am"). Past by up to 12 h: stale text; return the past time,
+  // do not roll it to tomorrow (limitWait then uses the short fixed pause).
+  return guess < nowMs - 12 * 3600_000 ? guess + 24 * 3600_000 : guess;
 }
 
 // Parse the reset time from a limit message. Returns epoch ms, or undefined.
@@ -124,6 +127,11 @@ export function limitWait(
       untilMs: nowMs + pauseMinutes * 60_000,
       reason: `no reset time in the message, fixed pause ${pauseMinutes} min`,
     };
+  if (reset < nowMs - 60_000)
+    return {
+      untilMs: nowMs + pauseMinutes * 60_000,
+      reason: `reset time ${new Date(reset).toISOString()} is in the past (stale text), fixed pause ${pauseMinutes} min`,
+    };
   const until = Math.min(
     Math.max(reset, nowMs) + marginMinutes * 60_000,
     nowMs + maxHours * 3600_000,
@@ -132,6 +140,18 @@ export function limitWait(
     untilMs: until,
     reason: `limit resets ${new Date(reset).toISOString()}`,
   };
+}
+
+// Log text written after an attempt started. `start` is the newest phase log and its size
+// at the start. A new file (or a shorter one) is new text in full.
+export function freshLogText(
+  file: string | undefined,
+  text: string,
+  start: { file?: string; size: number },
+): string {
+  if (!file) return "";
+  if (file !== start.file || text.length < start.size) return text;
+  return text.slice(start.size);
 }
 
 // Next agent after a stall. A Claude limit skips the other Claude agents (same shared limit).
