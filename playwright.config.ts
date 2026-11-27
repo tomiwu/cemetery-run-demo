@@ -19,6 +19,8 @@ export default defineConfig({
   // (the "less than 1 s" checks) stay as they are.
   timeout: isCI ? 120_000 : 30_000,
   expect: { timeout: isCI ? 15_000 : 5_000 },
+  // Software WebGL is CPU bound. Fewer parallel workers stop the short 1 s checks from missing their window.
+  workers: 2,
   reporter: [["list"], ["html", { open: "never" }]],
   webServer: {
     command:
