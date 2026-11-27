@@ -1,6 +1,6 @@
 import type { CONFIG } from "../config";
 import type { Box, Circle, Shape, Vec } from "./collision";
-import { seededRandom } from "./random";
+import { createRandom } from "./random";
 
 /**
  * The cemetery map. It is pure data, made from `CONFIG.map` and a seed: the same config gives
@@ -105,7 +105,7 @@ const TREE_SPOTS: readonly (readonly [number, number])[] = [
 ];
 
 export function buildMap(cfg: MapConfig): CemeteryMap {
-  const random = seededRandom(cfg.seed);
+  const random = createRandom(cfg.seed);
   const halfWidth = cfg.width / 2;
   const halfLength = cfg.length / 2;
   const wall = cfg.wallThickness;

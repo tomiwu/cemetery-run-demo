@@ -1,17 +1,13 @@
 import "./styles.css";
 import { WebGLRenderer, type Camera, type Scene } from "three";
 import { CONFIG } from "./config";
-import {
-  blendHearse,
-  initialHearse,
-  stepHearse,
-  type HearseState,
-} from "./logic/hearse";
-import { resolveHearse } from "./logic/collision";
+import { blendHearse, type HearseState } from "./logic/hearse";
 import { createInput } from "./logic/input";
 import { introProgress } from "./logic/intro";
 import { buildMap } from "./logic/map";
+import { createRandom } from "./logic/random";
 import { initialState, next, type SessionEvent } from "./logic/session";
+import { createWorld, stepWorld, type World } from "./logic/world";
 import { createGameScene } from "./render/game";
 import { createIntroScene } from "./render/intro";
 import { createJoystick } from "./ui/joystick";
@@ -24,7 +20,10 @@ if (!canvas || !ui) {
 }
 
 const renderer = new WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// `?test=1` draws at pixel ratio 1: software WebGL in CI is too slow at a higher ratio.
+const testMode =
+  new URLSearchParams(window.location.search).get("test") === "1";
+renderer.setPixelRatio(testMode ? 1 : Math.min(window.devicePixelRatio, 2));
 
 const intro = createIntroScene();
 const map = buildMap(CONFIG.map);
@@ -40,14 +39,11 @@ game.loaded
 const input = createInput(CONFIG.joystick);
 createJoystick(canvas, input);
 
-const START_HEARSE = initialHearse(
-  map.hearseStart.x,
-  map.hearseStart.z,
-  map.hearseStart.heading,
-);
-let hearse: HearseState = START_HEARSE;
-let previousHearse: HearseState = START_HEARSE;
+let world: World = createWorld(map);
+let previousHearse: HearseState = world.hearse;
 let accumulator = 0;
+let rounds = 0;
+let rng = createRandom(CONFIG.spawn.seed);
 
 function resize(): void {
   const width = window.innerWidth;
@@ -65,11 +61,14 @@ function send(event: SessionEvent): void {
   if (target !== state) {
     state = target;
     if (state === "playing") {
-      hearse = START_HEARSE;
-      previousHearse = START_HEARSE;
+      // A new seed for each round, and the same seeds in each test run.
+      rounds += 1;
+      rng = createRandom(CONFIG.spawn.seed + rounds);
+      world = createWorld(map);
+      previousHearse = world.hearse;
       accumulator = 0;
       input.reset();
-      game.snap(hearse);
+      game.snap(world.hearse);
     }
     screens.show(state);
   }
@@ -124,7 +123,8 @@ if (query.get("test") === "1") {
       }
       frozenProgress = value;
     },
-    hearse: () => ({ ...hearse }),
+    hearse: () => ({ ...world.hearse }),
+    zombies: () => world.zombies.map((zombie) => ({ ...zombie })),
     gameLoaded: () => gameLoaded,
     drawCalls: () => lastDrawCalls,
   };
@@ -139,13 +139,8 @@ function stepLogic(frameSeconds: number): number {
   // A very slow frame drops the extra time, so the loop cannot run away.
   accumulator = Math.min(accumulator, step * CONFIG.maxStepsPerFrame);
   while (accumulator >= step) {
-    previousHearse = hearse;
-    hearse = resolveHearse(
-      stepHearse(hearse, input.vector(), step, CONFIG.hearse),
-      CONFIG.hearse.radius,
-      map.obstacles,
-      map.bounds,
-    );
+    previousHearse = world.hearse;
+    world = stepWorld(world, input.vector(), step, rng);
     accumulator -= step;
   }
   return accumulator / step;
@@ -157,7 +152,11 @@ renderer.setAnimationLoop((time: number) => {
   lastFrame = time;
   if (state === "playing") {
     const alpha = stepLogic(frameSeconds);
-    game.update(blendHearse(previousHearse, hearse, alpha), frameSeconds);
+    game.update(
+      blendHearse(previousHearse, world.hearse, alpha),
+      world.zombies,
+      frameSeconds,
+    );
     draw(game.scene, game.camera);
     return;
   }

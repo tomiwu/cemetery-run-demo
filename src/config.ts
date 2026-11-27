@@ -78,6 +78,29 @@ export const CONFIG = {
     /** Zombie spawn points. `clearance` is the least distance to any obstacle. */
     spawns: { count: 16, clearance: 1.5, roadMargin: 1 },
   },
+  /** No zombie spawns closer than this to the hearse, in metres. */
+  spawnMinDistance: 6,
+  /** Zombies. Waves change the spawn numbers later. */
+  spawn: {
+    /** Seconds between two spawns. */
+    baseInterval: 2.5,
+    /** Walk speed in m/s. */
+    baseSpeed: 0.9,
+    /** Most zombies that walk at the same time. */
+    maxAlive: 24,
+    /** Seed of the random function for the spawn points. */
+    seed: 11,
+  },
+  zombie: {
+    /** Collision circle radius in metres. */
+    radius: 0.35,
+    /** A zombie that is this close to the chapel door has arrived. */
+    arriveDistance: 1.5,
+    /** Longest logic step in seconds. */
+    maxStepSeconds: 0.1,
+    /** Height of the drawn zombie in metres. */
+    height: 1.7,
+  },
   /** Fixed logic step in seconds (60 steps per second). */
   logicStepSeconds: 1 / 60,
   /** Most logic steps in one frame. A very slow frame drops the rest of the time. */
