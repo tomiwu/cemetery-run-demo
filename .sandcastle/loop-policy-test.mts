@@ -4,6 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   EventDeduper,
+  judgeNextStep,
+  needsVisualJudge,
+  parseJudgeVerdict,
+  redactSecrets,
   IMAGE_CHECK_RETRIES,
   IMAGE_CREATE_ERROR,
   classifyImageCheck,
@@ -268,6 +272,37 @@ check(
     "Provider 'podman' create failed: Image 'localhost/sandcastle:cemetery-run-demo' not found locally.",
   ),
 );
+
+// Visual judge.
+check("judge: label visual -> judge", needsVisualJudge(["Sandcastle", "visual"], "", []));
+check("judge: 'Visual match' in body -> judge", needsVisualJudge([], "- [ ] Visual match: ...", []));
+check("judge: render file changed -> judge", needsVisualJudge([], "", ["src/render/hearse.ts"]));
+check("judge: logic only -> no judge", !needsVisualJudge([], "score rules", ["src/logic/score.ts"]));
+check(
+  "judge: verdict PASS",
+  parseJudgeVerdict("# Judge\nVERDICT: PASS\n").verdict === "pass",
+);
+{
+  const v = parseJudgeVerdict(
+    "VERDICT: FAIL\n- gap: hearse has no windows -> add side windows\ngap: no fog -> add fog\n",
+  );
+  check(
+    "judge: verdict FAIL with 2 gaps",
+    v.verdict === "fail" && v.gaps.length === 2 && v.gaps[0] === "hearse has no windows -> add side windows",
+  );
+}
+check("judge: no verdict line -> missing", parseJudgeVerdict("I looked.").verdict === "missing");
+check(
+  "judge: fail in round 1 of 3 -> fix; round 3 -> give up; pass -> pass",
+  judgeNextStep({ verdict: "fail", gaps: [] }, 1, 3) === "fix" &&
+    judgeNextStep({ verdict: "missing", gaps: [] }, 3, 3) === "give-up" &&
+    judgeNextStep({ verdict: "pass", gaps: [] }, 1, 3) === "pass",
+);
+{
+  const tok = "github_pat_" + "A1b2C3d4E5f6G7h8I9j0KLMNOP";
+  const r = redactSecrets(`podman run -d -e GH_TOKEN=${tok} -e PROJECT=x -w /home ${tok}`);
+  check("redact: env values and tokens are removed", !r.includes(tok) && !r.includes("=x ") && r.includes("-e GH_TOKEN=***"));
+}
 
 if (fails) {
   console.log(`\n${fails} loop-policy test(s) failed.`);

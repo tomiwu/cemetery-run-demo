@@ -24,8 +24,32 @@ fi
 if pgrep -f "${DIR}/.sandcastle/node_modules/.bin/tsx .sandcastle/main.mts" >/dev/null; then
   echo "running: a loop process exists without a pid file"; exit 0
 fi
-podman image exists "$IMAGE" || { echo "image missing: $IMAGE (check disk before a build)" >&2; exit 1; }
+# Own podman store (2026-11-27): after the 07:58 box reboot the shared store lost layer data.
+# This project uses its own store, so other projects cannot break our image and we cannot
+# break theirs. A wrapper in $PODMAN_STORE/bin adds --root/--runroot to every podman call
+# of this loop (Sandcastle calls "podman" from PATH). The run root is in /tmp (cleared at boot).
+PODMAN_STORE="${PODMAN_STORE:-/workspace/${NAME}-podman}"
+if [ "$PODMAN_STORE" != "shared" ]; then
+  mkdir -p "$PODMAN_STORE/graph" "$PODMAN_STORE/bin"
+  cat > "$PODMAN_STORE/bin/podman" <<EOF
+#!/usr/bin/env bash
+# ${NAME} only: our own podman store, not the shared one (written by scripts/start-loop.sh).
+exec /usr/bin/podman --root "$PODMAN_STORE/graph" --runroot /tmp/${NAME}-podman/run --tmpdir /tmp/${NAME}-podman/tmp "\$@"
+EOF
+  chmod 755 "$PODMAN_STORE/bin/podman"
+  export PATH="$PODMAN_STORE/bin:$PATH"
+fi
 cd "$DIR"
+mkdir -p .sandcastle/logs
+if ! podman image exists "$IMAGE"; then
+  free_gb=$(df -BG --output=avail "$DIR" | tail -1 | tr -dc '0-9')
+  [ "${free_gb:-0}" -ge 6 ] || { echo "image missing: $IMAGE and only ${free_gb} GB free" >&2; exit 1; }
+  echo "image missing: build $IMAGE from .sandcastle/Containerfile (${free_gb} GB free)"
+  podman build -t "$IMAGE" -f .sandcastle/Containerfile .sandcastle >> .sandcastle/logs/image-build.log 2>&1 \
+    || { echo "image build failed: see .sandcastle/logs/image-build.log" >&2; exit 1; }
+fi
+# A box replace can remove .sandcastle/node_modules: install the orchestrator packages again.
+[ -x .sandcastle/node_modules/.bin/tsx ] || (cd .sandcastle && npm ci --no-audit --no-fund >/dev/null)
 unset GH_TOKEN  # the box GH_TOKEN is invalid
 [ -f .sandcastle/.env ] || { echo ".sandcastle/.env is missing" >&2; exit 1; }
 if grep -qE '^[[:space:]]*LOOP_WEBHOOK_(URL|KEY)=' .sandcastle/.env; then
@@ -35,6 +59,7 @@ set -a
 # shellcheck disable=SC1091
 source .sandcastle/.env
 set +a
+chmod 700 "$SECRETS" 2>/dev/null || true
 for f in gh-pat loop-webhook-url loop-webhook-key; do
   [ -s "$SECRETS/$f" ] || { echo "secret file missing or empty: $SECRETS/$f" >&2; exit 1; }
 done
