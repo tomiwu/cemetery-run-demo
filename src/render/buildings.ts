@@ -108,6 +108,16 @@ function addChapel(
     z: cz,
     color: brick,
   });
+  // Thin mortar lines: one every 0.3 m, a subtle brick pattern.
+  const mortar = mixColor(brick, "#000000", 0.3);
+  for (let y = 0.7; y < wallHeight - 0.4; y += 0.3) {
+    scenery.add(new BoxGeometry(w + 0.03, 0.035, d + 0.03), {
+      x: cx,
+      y,
+      z: cz,
+      color: mortar,
+    });
+  }
   // Darker brick band under the eaves, and stone corner blocks.
   scenery.add(new BoxGeometry(w + 0.08, 0.25, d + 0.08), {
     x: cx,
@@ -507,28 +517,28 @@ function addLampPosts(
       z: post.z,
       color: PALETTE.iron,
     });
-    scenery.add(new BoxGeometry(0.4, 0.07, 0.4), {
+    scenery.add(new BoxGeometry(0.44, 0.07, 0.44), {
       x: post.x,
       y: height,
       z: post.z,
       color: PALETTE.iron,
     });
-    glow.add(new BoxGeometry(0.28, 0.4, 0.28), {
+    glow.add(new BoxGeometry(0.35, 0.45, 0.35), {
       x: post.x,
-      y: height + 0.25,
+      y: height + 0.28,
       z: post.z,
       color: PALETTE.headlight,
     });
-    scenery.add(new ConeGeometry(0.28, 0.24, 4), {
+    scenery.add(new ConeGeometry(0.34, 0.24, 4), {
       x: post.x,
-      y: height + 0.57,
+      y: height + 0.62,
       z: post.z,
       turn: Math.PI / 4,
       color: PALETTE.iron,
     });
     scenery.add(new SphereGeometry(0.04, 5, 4), {
       x: post.x,
-      y: height + 0.73,
+      y: height + 0.78,
       z: post.z,
       color: PALETTE.iron,
     });

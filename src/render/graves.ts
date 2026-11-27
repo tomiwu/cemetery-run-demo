@@ -13,7 +13,7 @@ import {
   SphereGeometry,
   type BufferGeometry,
 } from "three";
-import type { GravePlacement, Placement } from "../logic/map";
+import type { GravePlacement, Placement, Rect } from "../logic/map";
 import { createRandom } from "../logic/random";
 import { GeometryBatch, mergePlain, mixColor } from "./geometry";
 import { patches, type Spot } from "./glow";
@@ -149,7 +149,7 @@ export function lanternSpot(
   grave: GravePlacement,
   random: () => number,
 ): { x: number; z: number; red: boolean } | null {
-  const lit = random() < 0.72;
+  const lit = random() < 0.9;
   const side = random() < 0.5 ? -1 : 1;
   const red = random() < 0.5;
   if (!lit) {
@@ -205,7 +205,7 @@ export function lanternMeshes(
   }
   const glass = mergePlain([new BoxGeometry(0.17, 0.3, 0.17)]);
   glass.translate(0, 0.2, 0);
-  const flame = new SphereGeometry(0.06, 6, 4);
+  const flame = new SphereGeometry(0.075, 6, 4);
   flame.scale(1, 1.7, 1);
   flame.translate(0, 0.2, 0);
 
@@ -257,18 +257,91 @@ export function lanternMeshes(
       x: item.x,
       y: 0.04,
       z: item.z,
-      size: 2.6 * item.size,
+      size: 1.2,
     }));
     const pool = patches(pools, {
       color: PALETTE.candleGlow,
-      opacity: 0.85,
+      opacity: 0.5,
       additive: true,
       power: 2.2,
     });
     pool.name = "candle-pools";
     group.add(pool);
   }
+  // A small soft glow around each flame (0.3 m), one draw call.
+  const halo = patches(
+    items.map((item) => ({
+      x: item.x,
+      y: 0.2 * item.size,
+      z: item.z,
+      size: 0.3 * item.size + 0.1,
+    })),
+    { color: PALETTE.flame, opacity: 0.9, additive: true, power: 1.5 },
+  );
+  halo.name = "flame-glow";
+  group.add(halo);
   return group;
+}
+
+/**
+ * Small props at the edge of the main path: low stones, flowers and a few lanterns. They are
+ * decoration only (no collision) and they frame the path in the near view.
+ */
+export function pathEdgeProps(
+  road: Rect,
+  seed: number,
+): { group: Group; lanterns: Lantern[] } {
+  const random = createRandom(seed);
+  const batch = new GeometryBatch();
+  const lanterns: Lantern[] = [];
+  const flowers = ["#D9C9A3", "#B8605A", "#C9A24A", "#8E86B0"];
+  for (let z = road.minZ + 2; z < road.maxZ - 1.5; z += 1.4) {
+    for (const side of [-1, 1]) {
+      const x = side * (road.maxX + 0.35 + random() * 0.5);
+      const kind = random();
+      const zz = z + (random() - 0.5) * 0.8;
+      if (kind < 0.4) {
+        batch.add(new BoxGeometry(0.34, 0.2, 0.26), {
+          x,
+          y: 0.1,
+          z: zz,
+          turn: random() * Math.PI,
+          color: mixColor(PALETTE.stoneGrey, PALETTE.stoneBase, random()),
+        });
+      } else if (kind < 0.85) {
+        const colour =
+          flowers[Math.floor(random() * flowers.length)] ?? "#D9C9A3";
+        for (let k = 0; k < 4; k += 1) {
+          batch.add(new SphereGeometry(0.07, 5, 4), {
+            x: x + (random() - 0.5) * 0.4,
+            y: 0.14 + random() * 0.08,
+            z: zz + (random() - 0.5) * 0.4,
+            color: colour,
+          });
+        }
+        batch.add(new BoxGeometry(0.34, 0.1, 0.34), {
+          x,
+          y: 0.05,
+          z: zz,
+          color: PALETTE.foliageLight,
+        });
+      } else {
+        lanterns.push({ x, z: zz, red: random() < 0.5, size: 1 });
+      }
+    }
+  }
+  const mesh = new Mesh(
+    batch.build(),
+    new MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.95,
+      flatShading: true,
+    }),
+  );
+  mesh.name = "path-edge-props";
+  const group = new Group();
+  group.add(mesh);
+  return { group, lanterns };
 }
 
 export function buildGraves(
@@ -303,19 +376,19 @@ export function buildGraves(
 export function pumpkinMesh(items: readonly Placement[]): Mesh {
   const batch = new GeometryBatch();
   for (const item of items) {
-    batch.add(new IcosahedronGeometry(0.3, 1), {
+    batch.add(new IcosahedronGeometry(0.2, 1), {
       x: item.x,
-      y: 0.2,
+      y: 0.16,
       z: item.z,
-      scale: [1.15, 0.8, 1.15],
+      scale: [1.15, 0.85, 1.15],
       turn: item.turn,
-      color: "#8F5B2B",
+      color: "#B06E2E",
     });
     batch.add(new BoxGeometry(0.07, 0.12, 0.07), {
       x: item.x,
-      y: 0.42,
+      y: 0.34,
       z: item.z,
-      color: "#3E4A28",
+      color: "#2A2A1C",
     });
   }
   const mesh = new Mesh(

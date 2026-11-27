@@ -24,6 +24,7 @@ import { patches, type Spot } from "./glow";
 import {
   buildGraves,
   lanternMeshes,
+  pathEdgeProps,
   pumpkinMesh,
   type Lantern,
 } from "./graves";
@@ -38,7 +39,7 @@ const GROUND_COLOR = PALETTE.grassOlive;
 const FOG_COLOR = "#6F5F5E";
 const MOON_COLOR = PALETTE.moon;
 
-const LOOK_HEIGHT = 1.1;
+const LOOK_HEIGHT = 0.4;
 /**
  * Side shift of the view axis, as a share of the camera side offset. The full value
  * (-lookAhead / offset.z) puts the hearse on the axis. A little less keeps the hearse a bit
@@ -83,6 +84,8 @@ export function createGameScene(
     0.4,
     new Color(PALETTE.skyMiddle),
     new Color(PALETTE.horizonGlow),
+    // Amber only in the lowest part of the sky, then mauve, then blue-grey.
+    { glow: 0.08, mid: 0.28 },
   );
   scene.add(sky);
 
@@ -102,7 +105,6 @@ export function createGameScene(
       vertexColors: true,
       color: GROUND_COLOR,
       roughness: 1,
-      flatShading: true,
     }),
   );
   ground.material.color.set("#ffffff");
@@ -118,8 +120,17 @@ export function createGameScene(
   scene.add(buildTrees(map, CONFIG.map.seed + 61));
 
   // Candle lanterns on the graves and at the chapel door (the candle slots of the map).
+  const mainRoad = map.roads[0];
+  const edge =
+    mainRoad === undefined
+      ? undefined
+      : pathEdgeProps(mainRoad, CONFIG.map.seed + 91);
+  if (edge !== undefined) {
+    scene.add(edge.group);
+  }
   const lanterns: Lantern[] = [
     ...graves.lanterns,
+    ...(edge?.lanterns ?? []),
     ...map.candleSlots.map((slot, index) => ({
       x: slot.x,
       z: slot.z,
@@ -132,7 +143,7 @@ export function createGameScene(
   // Low ground fog between the graves.
   const fogRandom = createRandom(CONFIG.map.seed + 77);
   const fogSpots: Spot[] = [];
-  for (let i = 0; i < 46; i += 1) {
+  for (let i = 0; i < 30; i += 1) {
     fogSpots.push({
       x: (fogRandom() - 0.5) * 2 * (map.bounds.maxX + 6),
       y: 0.35 + fogRandom() * 0.5,
@@ -148,6 +159,24 @@ export function createGameScene(
   });
   groundFog.name = "ground-fog";
   scene.add(groundFog);
+  // Large soft white-grey wisps between the grave rows, 0.5 to 1.5 m above the ground.
+  const wispSpots: Spot[] = [];
+  for (let i = 0; i < 8; i += 1) {
+    wispSpots.push({
+      x: (i % 2 === 0 ? -1 : 1) * (6 + fogRandom() * 8),
+      y: 0.5 + fogRandom(),
+      z: -24 + i * 6.5 + fogRandom() * 3,
+      size: 7 + fogRandom() * 4,
+    });
+  }
+  const wisps = patches(wispSpots, {
+    color: "#9AA0A8",
+    opacity: 0.2,
+    additive: true,
+    power: 1.4,
+  });
+  wisps.name = "fog-wisps";
+  scene.add(wisps);
 
   const zombieLayer = createZombieLayer();
   scene.add(zombieLayer.group);
@@ -173,12 +202,13 @@ export function createGameScene(
   hearse.group.traverse((object) => {
     if (object instanceof Mesh) {
       object.castShadow = true;
-      // The glossy paint shows more of the dusk sky from above (roof and bonnet).
+      // Deep black glossy paint: the dusk sky shows on the roof and the bonnet.
       if (object.name === "body") {
         const paint = object.material as MeshStandardMaterial;
-        paint.envMapIntensity = 3.6;
-        paint.metalness = 0.9;
-        paint.color.set(PALETTE.hearseSheen);
+        paint.envMapIntensity = 3.2;
+        paint.metalness = 0.6;
+        paint.roughness = 0.25;
+        paint.color.set(PALETTE.hearseBody);
       }
     }
   });

@@ -52,9 +52,9 @@ function material(vertexColors = true): MeshStandardMaterial {
     vertexColors,
     roughness: 0.95,
     flatShading: true,
-    // A cool green rim: the figures stay readable against the dark ground.
-    emissive: new Color("#33422A"),
-    emissiveIntensity: 0.55,
+    // A little skin-coloured self light: the figures stay readable against the dark ground.
+    emissive: new Color(PALETTE.zombieSkin),
+    emissiveIntensity: 0.15,
   });
 }
 

@@ -10,8 +10,8 @@ import { PALETTE } from "./palette";
  */
 
 /** The path is this much narrower than the road rectangle on each side, and its edge is soft. */
-const PATH_INSET = 0.9;
-const PATH_SOFT_EDGE = 1.5;
+const PATH_INSET = 1;
+const PATH_SOFT_EDGE = 0.6;
 
 /** Distance from a point to a rectangle (0 inside). */
 function distanceToRect(x: number, z: number, area: Rect): number {
@@ -47,7 +47,7 @@ export function pathColor(k: number): Color {
   // A little extra warmth: the cool sky light would make the dirt look grey.
   return mixColor(PALETTE.pathDirt, PALETTE.pathDirtLight, k).lerp(
     new Color(PALETTE.pathDirtWarm),
-    0.3,
+    0.12,
   );
 }
 
@@ -56,51 +56,54 @@ export function grassColor(k: number): Color {
   return mixColor(PALETTE.grassOlive, PALETTE.grassOliveLight, k);
 }
 
-const GRID = 1;
+const GRID = 0.75;
 const REACH_X = 38;
 const REACH_Z = 54;
+/** Largest random colour change of a vertex (4 %). */
+const NOISE = 0.04;
 
 /**
- * The ground inside and near the walls: a fine low-poly grid, one flat colour per triangle,
- * with the dirt paths in the colour. It is flat (y = 0). The grass outside is a plain plane.
+ * The ground inside and near the walls: a fine grid with smooth vertex colours (no flat colour
+ * per triangle), and the dirt paths in the colour. It is flat (y = 0). The grass outside is a
+ * plain plane.
  */
 export function groundGeometry(roads: readonly Rect[]): BufferGeometry {
   const random = seeded(23);
-  const positions: number[] = [];
-  const colors: number[] = [];
   const columns = Math.round((REACH_X * 2) / GRID);
   const rows = Math.round((REACH_Z * 2) / GRID);
-  const colour = (x: number, z: number): Color => {
-    const path = pathAmount(roads, x, z);
-    const patch = 0.5 + 0.5 * Math.sin(x * 0.17) * Math.sin(z * 0.13);
-    const grass = grassColor(Math.min(1, random() * 0.7 + patch * 0.3));
-    const dirt = pathColor(0.5 + (random() - 0.5) * 0.5 + (patch - 0.5) * 0.3);
-    return grass.lerp(dirt, path);
-  };
-  const triangle = (
-    a: readonly [number, number],
-    b: readonly [number, number],
-    c: readonly [number, number],
-  ): void => {
-    const middle = colour((a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3);
-    for (const [x, z] of [a, b, c]) {
+  const positions: number[] = [];
+  const colors: number[] = [];
+  const indices: number[] = [];
+  for (let row = 0; row <= rows; row += 1) {
+    for (let column = 0; column <= columns; column += 1) {
+      const x = -REACH_X + column * GRID;
+      const z = -REACH_Z + row * GRID;
+      const path = pathAmount(roads, x, z);
+      // Slow patches of light and dark, and a gravel grain on the path.
+      const patch = 0.5 + 0.5 * Math.sin(x * 0.17) * Math.sin(z * 0.13);
+      const grass = grassColor(0.25 + patch * 0.5);
+      const dirt = pathColor(0.5 + (patch - 0.5) * 0.3);
+      const color = grass
+        .lerp(dirt, path)
+        .multiplyScalar(1 + (random() - 0.5) * 2 * NOISE);
       positions.push(x, 0, z);
-      colors.push(middle.r, middle.g, middle.b);
+      colors.push(color.r, color.g, color.b);
     }
-  };
+  }
+  const stride = columns + 1;
   for (let row = 0; row < rows; row += 1) {
     for (let column = 0; column < columns; column += 1) {
-      const x0 = -REACH_X + column * GRID;
-      const z0 = -REACH_Z + row * GRID;
-      const x1 = x0 + GRID;
-      const z1 = z0 + GRID;
-      triangle([x0, z0], [x0, z1], [x1, z0]);
-      triangle([x1, z0], [x0, z1], [x1, z1]);
+      const a = row * stride + column;
+      const b = a + 1;
+      const c = a + stride;
+      const d = c + 1;
+      indices.push(a, c, b, b, c, d);
     }
   }
   const geometry = new BufferGeometry();
   geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
   geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
+  geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
 }

@@ -60,6 +60,8 @@ export function skyDome(
   spread = 0.55,
   mid?: Color,
   glow?: Color,
+  /** Gradient position where the amber ends, and where the mauve is. */
+  bands: { glow: number; mid: number } = { glow: 0.26, mid: 0.5 },
 ): Mesh {
   const geometry = new SphereGeometry(SKY_RADIUS, 20, 12);
   const position = geometry.getAttribute("position");
@@ -73,8 +75,8 @@ export function skyDome(
         ]
       : [
           [0, low],
-          [0.26, glow ?? low],
-          [0.5, mid ?? high],
+          [bands.glow, glow ?? low],
+          [bands.mid, mid ?? high],
           [1, high],
         ];
   for (let i = 0; i < position.count; i += 1) {

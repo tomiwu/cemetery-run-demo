@@ -71,6 +71,22 @@ test("zombies appear between the graves and walk to the chapel", async ({
     )
     .toBe(true);
   await page.keyboard.up("ArrowUp");
+  // Wait until at least 4 zombies are in the near and middle view, so the screenshot shows a group.
+  await expect
+    .poll(
+      async () => {
+        const hearse = await page.evaluate(() => window.__game?.hearse());
+        return (await zombies(page)).filter(
+          (zombie) =>
+            Math.hypot(
+              zombie.x - (hearse?.x ?? 0),
+              zombie.z - (hearse?.z ?? 0),
+            ) < 18,
+        ).length;
+      },
+      { timeout: 90_000 },
+    )
+    .toBeGreaterThanOrEqual(4);
   await page.waitForTimeout(1500);
   await page.screenshot({
     path: `test-results/screens/${testInfo.project.name}-zombies.png`,
