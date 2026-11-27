@@ -25,6 +25,11 @@
 //  5. permissions.deny in .claude/settings.json (works with --dangerously-skip-permissions).
 //  6. Short prompts: only facts that the code does not show; inline issue limit 15 KB.
 //  7. The reviewer checks the acceptance criteria first and lists bugs. REVIEW_MODEL.
+//  7b. Visual judge (UI issues: label visual/ui, "Visual match" in the issue, or a render/UI file
+//      changed): a separate read-only agent (JUDGE_MODEL, EFFORT_JUDGE high) takes Playwright
+//      screenshots, compares them with docs/targets and docs/ref and writes PASS/FAIL plus gaps.
+//      FAIL: visual-fixer fixes the gaps, checks run, the judge looks again (JUDGE_ROUNDS).
+//      Still FAIL: the PR opens with needs-validation and the loop does not merge it.
 //  8. ## Verification = the command and the pasted tail of its real output; before/after numbers.
 //  9. Effort per phase (EFFORT_<PHASE>; a format/lint-only fixer uses low).
 //  Status file STATUS_FILE (JSON: phase, model, issue, startedAt, lastOutputAt).
@@ -42,6 +47,10 @@ import { join } from "node:path";
 import {
   type CiJob,
   CLAUDE_LIMIT,
+  judgeNextStep,
+  needsVisualJudge,
+  parseJudgeVerdict,
+  redactSecrets,
   IMAGE_CHECK_RETRIES,
   IMAGE_CREATE_ERROR,
   classifyImageCheck,
@@ -72,6 +81,10 @@ const BASE_BRANCH = process.env.BASE_BRANCH ?? "main";
 // Optional second Claude model. A Claude limit skips it (the limit is shared).
 const CLAUDE_FALLBACK_MODEL = process.env.CLAUDE_FALLBACK_MODEL ?? "";
 const REVIEW_MODEL = process.env.REVIEW_MODEL ?? CLAUDE_MODEL;
+// Visual judge (Tomasz, 2026-11-27): a separate read-only thinking model at high effort
+// (EFFORT_JUDGE, default high). JUDGE_ROUNDS = judge runs per issue (fix between them).
+const JUDGE_MODEL = process.env.JUDGE_MODEL ?? "claude-opus-5-5";
+const JUDGE_ROUNDS = Number(process.env.JUDGE_ROUNDS ?? "3");
 const PAUSE_MINUTES = Number(process.env.PAUSE_MINUTES ?? "30");
 const MAX_PAUSES = Number(process.env.MAX_PAUSES ?? "12");
 const LIMIT_MAX_HOURS = Number(process.env.LIMIT_MAX_HOURS ?? "6");
@@ -158,7 +171,12 @@ async function runPhase(
   const baseSha = (await sandbox.exec("git rev-parse HEAD")).stdout.trim();
   for (;;) {
     const effort = effortFor(phaseOfName(name, checkLog));
-    const model = name === "reviewer" ? REVIEW_MODEL : MODELS[agentIndex];
+    const model =
+      name === "reviewer"
+        ? REVIEW_MODEL
+        : name.startsWith("judge")
+          ? JUDGE_MODEL
+          : MODELS[agentIndex];
     const env = {
       LOOP_STOP_GATE: "1",
       LOOP_PHASE: name,
@@ -308,6 +326,43 @@ async function createBox(create: () => Promise<sandcastle.Sandbox>): Promise<san
     await ensureImage();
     return await create();
   }
+}
+
+// Visual judge: a separate read-only agent. It takes screenshots, compares them with the
+// targets and writes .sandcastle/context/judge.md. A judge commit is removed.
+async function runJudge(
+  sandbox: sandcastle.Sandbox,
+  args: Record<string, string>,
+  round: number,
+) {
+  const before = (await sandbox.exec("git rev-parse HEAD")).stdout.trim();
+  await sandbox.exec("mkdir -p .sandcastle/context && rm -f .sandcastle/context/judge.md");
+  await runPhase(sandbox, {
+    name: `judge-${round}`,
+    maxIterations: 1,
+    promptFile: "./.sandcastle/judge-prompt.md",
+    promptArgs: { ...args, ROUND: String(round) },
+  });
+  const after = (await sandbox.exec("git rev-parse HEAD")).stdout.trim();
+  if (after !== before) {
+    console.log(`The judge made a commit. Remove it (the judge is read-only).`);
+    await sandbox.exec(`git reset --hard ${before}`);
+  }
+  const text = (await sandbox.exec("cat .sandcastle/context/judge.md 2>/dev/null || true")).stdout;
+  const verdict = parseJudgeVerdict(text);
+  if (currentIssue)
+    spawnSync(
+      "gh",
+      [
+        "issue",
+        "comment",
+        String(currentIssue),
+        "--body",
+        `Visual judge round ${round} (${JUDGE_MODEL}, effort ${effortFor("judge")}): **${verdict.verdict.toUpperCase()}**\n\n${verdict.gaps.map((g) => `- ${g}`).join("\n") || "(no gaps)"}`,
+      ],
+      { stdio: "inherit" },
+    );
+  return verdict;
 }
 
 // Optional host check after the implementer (rule 4). Empty: no check.
@@ -544,7 +599,7 @@ const deduper = new EventDeduper();
 
 async function postEvent(
   event: LoopEvent,
-  extra: { issue?: number; pr?: string } = {},
+  extra: { issue?: number; pr?: string; reason?: string } = {},
   stateKey?: string,
 ): Promise<void> {
   if (stateKey !== undefined && !deduper.shouldSend(event, stateKey)) {
@@ -721,6 +776,7 @@ async function giveUp(issueNumber: number, text: string, pr?: string) {
 async function mainLoop(): Promise<void> {
   console.log(`Agent: Claude Code (${CLAUDE_MODEL})`);
   console.log(`Review model: ${REVIEW_MODEL}`);
+  console.log(`Visual judge: ${JUDGE_MODEL}, effort ${effortFor("judge")}, ${JUDGE_ROUNDS} rounds.`);
   console.log(`Base branch: ${BASE_BRANCH}`);
   console.log(`AUTO_MERGE=${AUTO_MERGE ? "1" : "0"}. Required jobs: ${REQUIRED_JOBS.join(", ")}. Image: ${IMAGE}.`);
   let iteration = 0;
@@ -788,6 +844,7 @@ async function mainLoop(): Promise<void> {
     );
     let passed = false;
     let commits = 0;
+    let visualGaps: string[] = [];
     const sandbox = await createBox(() => sandcastle.createSandbox({
       branch,
       baseBranch: `origin/${BASE_BRANCH}`,
@@ -809,21 +866,48 @@ async function mainLoop(): Promise<void> {
           promptFile: "./.sandcastle/review-prompt.md",
           promptArgs: args,
         });
-        for (let attempt = 0; attempt <= MAX_FIX_ATTEMPTS; attempt++) {
-          const result = await runChecks(sandbox);
-          if (result.ok) {
-            passed = true;
-            break;
+        const checksWithFixes = async (tag: string): Promise<boolean> => {
+          for (let attempt = 0; attempt <= MAX_FIX_ATTEMPTS; attempt++) {
+            const result = await runChecks(sandbox);
+            if (result.ok) return true;
+            console.log(`Checks failed for #${issue.number} (attempt ${attempt}).`);
+            if (attempt === MAX_FIX_ATTEMPTS) return false;
+            await runPhase(sandbox, {
+              name: `fixer-${tag}${attempt + 1}`,
+              maxIterations: 1,
+              promptFile: "./.sandcastle/fix-prompt.md",
+              promptArgs: { ...args, CHECK_LOG: result.log.slice(-12000) },
+              checkLog: result.log.slice(-12000),
+            });
           }
-          console.log(`Checks failed for #${issue.number} (attempt ${attempt}).`);
-          if (attempt === MAX_FIX_ATTEMPTS) break;
-          await runPhase(sandbox, {
-            name: `fixer-${attempt + 1}`,
-            maxIterations: 1,
-            promptFile: "./.sandcastle/fix-prompt.md",
-            promptArgs: { ...args, CHECK_LOG: result.log.slice(-12000) },
-            checkLog: result.log.slice(-12000),
-          });
+          return false;
+        };
+        passed = await checksWithFixes("");
+        const changed = (
+          await sandbox.exec(`git diff --name-only origin/${BASE_BRANCH}...HEAD`)
+        ).stdout.split("\n");
+        const labels = issue.labels.map((l) => l.name);
+        if (passed && needsVisualJudge(labels, issue.body ?? "", changed)) {
+          for (let round = 1; ; round++) {
+            const verdict = await runJudge(sandbox, args, round);
+            const step = judgeNextStep(verdict, round, JUDGE_ROUNDS);
+            console.log(
+              `Visual judge round ${round}: ${verdict.verdict}, ${verdict.gaps.length} gaps -> ${step}.`,
+            );
+            if (step === "pass") break;
+            if (step === "give-up") {
+              visualGaps = verdict.gaps.length ? verdict.gaps : ["the judge wrote no gap list"];
+              break;
+            }
+            await runPhase(sandbox, {
+              name: `visual-fixer-${round}`,
+              maxIterations: 1,
+              promptFile: "./.sandcastle/visual-fix-prompt.md",
+              promptArgs: { ...args, GAPS: verdict.gaps.map((g) => `- ${g}`).join("\n") },
+            });
+            passed = await checksWithFixes(`v${round}-`);
+            if (!passed) break;
+          }
         }
       }
     } finally {
@@ -861,6 +945,28 @@ async function mainLoop(): Promise<void> {
     ]);
     console.log(`Opened ${url}.`);
     await postEvent("pr_opened", { issue: issue.number, pr: url });
+    if (visualGaps.length) {
+      // The judge did not pass the look after JUDGE_ROUNDS: no auto-merge, a human decides.
+      spawnSync("gh", ["pr", "edit", url, "--add-label", "needs-validation"], { stdio: "inherit" });
+      spawnSync(
+        "gh",
+        [
+          "pr",
+          "comment",
+          url,
+          "--body",
+          `Visual judge (${JUDGE_MODEL}, effort ${effortFor("judge")}): FAIL after ${JUDGE_ROUNDS} rounds. The loop does not merge this PR.\n\n${visualGaps.map((g) => `- ${g}`).join("\n")}`,
+        ],
+        { stdio: "inherit" },
+      );
+      waiting.add(issue.number);
+      await postEvent(
+        "ci_failed",
+        { issue: issue.number, pr: url, reason: "visual judge fail" },
+        `${issue.number}:visual:${headSha(url)}`,
+      );
+      continue;
+    }
     if (await waitCiWithFixes(url, branch, issue.number)) {
       if (!mergeOrWait(url, issue.number, true)) {
         waiting.add(issue.number);
@@ -896,7 +1002,7 @@ function nextIssueSkipping(skip: Set<number>): Issue | undefined {
 try {
   await mainLoop();
 } catch (e) {
-  console.log(`Loop crashed: ${`${e}`.slice(0, 500)}`);
+  console.log(`Loop crashed: ${redactSecrets(`${e}`).slice(0, 1500)}`);
   await postEvent("loop_crashed", currentIssue ? { issue: currentIssue } : {});
   process.exitCode = 1;
 }
