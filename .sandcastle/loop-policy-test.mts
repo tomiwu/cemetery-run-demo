@@ -4,6 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   EventDeduper,
+  IMAGE_CHECK_RETRIES,
+  IMAGE_CREATE_ERROR,
+  classifyImageCheck,
+  imageRecoveryStep,
   NETWORK_ERROR,
   containerNameOf,
   agentBeforePhase,
@@ -236,6 +240,34 @@ check(
   ) === "sandcastle-048e75d8-3bbc-4972-b520-0da2f44984a0",
 );
 check("container: no name gives undefined", containerNameOf("podman rm failed") === undefined);
+
+// Image check: a transient inspect error is not a missing image.
+check("image: exit 0 is ok", classifyImageCheck(0, "") === "ok");
+check(
+  "image: 'image not known' is missing",
+  classifyImageCheck(125, "Error: localhost/sandcastle:x: image not known") === "missing",
+);
+check(
+  "image: a lock error is transient",
+  classifyImageCheck(125, "Error: database is locked") === "transient",
+);
+check("image: ok -> use", imageRecoveryStep("ok", 0, false) === "use");
+check("image: first misses -> wait", imageRecoveryStep("missing", 0, false) === "wait");
+check(
+  "image: missing after all retries -> rebuild once",
+  imageRecoveryStep("missing", IMAGE_CHECK_RETRIES - 1, false) === "rebuild" &&
+    imageRecoveryStep("missing", IMAGE_CHECK_RETRIES - 1, true) === "give-up",
+);
+check(
+  "image: transient after all retries -> give up (no rebuild)",
+  imageRecoveryStep("transient", IMAGE_CHECK_RETRIES - 1, false) === "give-up",
+);
+check(
+  "image: sandcastle create error text is detected",
+  IMAGE_CREATE_ERROR.test(
+    "Provider 'podman' create failed: Image 'localhost/sandcastle:cemetery-run-demo' not found locally.",
+  ),
+);
 
 if (fails) {
   console.log(`\n${fails} loop-policy test(s) failed.`);
