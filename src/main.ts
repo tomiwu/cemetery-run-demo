@@ -89,6 +89,10 @@ if (query.get("test") === "1") {
     state: () => state,
     introProgress: () => progress,
     freezeIntro: (value) => {
+      if (value === null && frozenProgress !== null) {
+        // Continue from the held point, not from the start.
+        introElapsed = frozenProgress * CONFIG.introSeconds;
+      }
       frozenProgress = value;
     },
     hearse: () => ({ ...hearse }),
