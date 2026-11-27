@@ -3,6 +3,8 @@ import { expect, test } from "@playwright/test";
 test("smoke: page loads, hidden from search, canvas draws", async ({
   page,
 }, testInfo) => {
+  // The polls below wait up to 30 s each (slow software WebGL in CI).
+  test.setTimeout(120_000);
   const problems: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") {

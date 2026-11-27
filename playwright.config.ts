@@ -11,6 +11,9 @@ export default defineConfig({
   testDir: "e2e",
   outputDir: "test-results",
   forbidOnly: isCI,
+  // One retry in CI only: software WebGL on a shared runner sometimes misses a short timing window.
+  // A test that fails twice fails the job.
+  retries: isCI ? 1 : 0,
   reporter: [["list"], ["html", { open: "never" }]],
   webServer: {
     command:

@@ -102,6 +102,7 @@ Scene: night, cold blue-grey moonlight plus warm candle and lantern light in the
 - WebGL in headless Chromium: flags `--use-angle=swiftshader` and `--enable-unsafe-swiftshader`.
 - Screenshots are CI artifacts (`e2e-screenshots`). The phone gallery issue adds a gallery page in `docs/gallery/`.
 - No test uses the network.
+- (2026-11-27) CI gives each e2e test one retry (`retries: 1`, CI only), because software WebGL on a shared runner sometimes misses a short timing window (four runs of a docs-only PR failed on different timing tests). A test that fails twice fails the job. Playwright reports a passed retry as "flaky".
 
 ## 8. Hard limits (A0.3)
 
