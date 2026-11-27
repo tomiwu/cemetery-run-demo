@@ -289,3 +289,17 @@ export class EventDeduper {
     return true;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Robustness (cemetery-run-demo, 2026-11-27). A transient network error of the
+// agent (DNS, reset, timeout) is a stall with a short pause, not a crash.
+// A container that podman cannot remove is removed by its name from the error.
+// ---------------------------------------------------------------------------
+export const NETWORK_ERROR =
+  /EAI_AGAIN|ENOTFOUND|ECONNRESET|ETIMEDOUT|ECONNREFUSED|socket hang up|Can't reach the API server/i;
+
+export function containerNameOf(text: string): string | undefined {
+  return /sandcastle-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.exec(
+    text,
+  )?.[0];
+}

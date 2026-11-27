@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   EventDeduper,
+  NETWORK_ERROR,
+  containerNameOf,
   agentBeforePhase,
   jobGate,
   effortFor,
@@ -220,6 +222,20 @@ check(
     dd.shouldSend("loop_idle", "w=2") &&
     !dd.shouldSend("loop_idle", "w=2"),
 );
+
+// Robustness: network errors and container names from podman errors.
+check(
+  "network: EAI_AGAIN API error is a network error",
+  NETWORK_ERROR.test("API Error: Can't reach the API server — check your internet or DNS (EAI_AGAIN)"),
+);
+check("network: a test failure is not a network error", !NETWORK_ERROR.test("expect(received).toBe(expected)"));
+check(
+  "container: name from a podman rm error",
+  containerNameOf(
+    "Error: podman rm failed: Command failed: podman rm -f sandcastle-048e75d8-3bbc-4972-b520-0da2f44984a0",
+  ) === "sandcastle-048e75d8-3bbc-4972-b520-0da2f44984a0",
+);
+check("container: no name gives undefined", containerNameOf("podman rm failed") === undefined);
 
 if (fails) {
   console.log(`\n${fails} loop-policy test(s) failed.`);

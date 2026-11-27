@@ -42,6 +42,8 @@ import { join } from "node:path";
 import {
   type CiJob,
   CLAUDE_LIMIT,
+  NETWORK_ERROR,
+  containerNameOf,
   EventDeduper,
   jobGate,
   effortFor,
@@ -69,6 +71,7 @@ const REVIEW_MODEL = process.env.REVIEW_MODEL ?? CLAUDE_MODEL;
 const PAUSE_MINUTES = Number(process.env.PAUSE_MINUTES ?? "30");
 const MAX_PAUSES = Number(process.env.MAX_PAUSES ?? "12");
 const LIMIT_MAX_HOURS = Number(process.env.LIMIT_MAX_HOURS ?? "6");
+const NETWORK_PAUSE_MINUTES = Number(process.env.NETWORK_PAUSE_MINUTES ?? "3");
 
 // Project-specific settings. Edit .sandcastle/checks.json, not this file.
 interface Config {
@@ -180,11 +183,12 @@ async function runPhase(
         ...runOptions,
         agent: sandcastle.claudeCode(model, { effort, env }),
       });
-      if (result.commits.length || !STALL.test(logTail(name))) return result;
+      const tail = logTail(name);
+      if (result.commits.length || !(STALL.test(tail) || NETWORK_ERROR.test(tail))) return result;
       failure = `stall text in the agent log: ${logTail(name).slice(-300)}`;
     } catch (error) {
       failure = `${error} ${logTail(name).slice(-600)}`;
-      if (!STALL.test(failure)) throw error;
+      if (!STALL.test(failure) && !NETWORK_ERROR.test(failure)) throw error;
     } finally {
       clearInterval(beat);
     }
@@ -201,7 +205,12 @@ async function runPhase(
         `All models stalled ${MAX_PAUSES + 1} times. Last error: ${failure.slice(0, 300)}`,
       );
     pauses++;
-    const w = CLAUDE_LIMIT.test(failure)
+    const w = NETWORK_ERROR.test(failure)
+      ? {
+          untilMs: Date.now() + NETWORK_PAUSE_MINUTES * 60_000,
+          reason: `network error, pause ${NETWORK_PAUSE_MINUTES} min`,
+        }
+      : CLAUDE_LIMIT.test(failure)
       ? limitWait(failure, Date.now(), PAUSE_MINUTES, LIMIT_MAX_HOURS)
       : {
           untilMs: Date.now() + PAUSE_MINUTES * 60_000,
@@ -213,6 +222,26 @@ async function runPhase(
     saveStatus("pause", w.reason, new Date().toISOString(), null);
     await sleepUntil(w.untilMs);
     agentIndex = 0;
+  }
+}
+
+// Close a sandbox. If podman cannot remove the container (PID 1 does not stop),
+// kill that one container by its PID and remove it by name. Never throw: the loop goes on.
+async function safeClose(box: sandcastle.Sandbox): Promise<void> {
+  try {
+    await box.close();
+    return;
+  } catch (error) {
+    console.log(`Sandbox close failed: ${`${error}`.slice(0, 300)}`);
+    const name = containerNameOf(`${error}`);
+    if (!name) return;
+    const pid = spawnSync("podman", ["inspect", "--format", "{{.State.Pid}}", name], {
+      encoding: "utf8",
+    }).stdout.trim();
+    if (/^[1-9][0-9]*$/.test(pid)) spawnSync("kill", ["-9", pid]);
+    await sleepUntil(Date.now() + 3_000);
+    const rm = spawnSync("podman", ["rm", "-f", name], { encoding: "utf8", timeout: 60_000 });
+    console.log(`Forced removal of ${name}: exit ${rm.status ?? "timeout"}.`);
   }
 }
 
@@ -605,7 +634,7 @@ async function waitCiWithFixes(
         promptArgs: { ...args, CHECK_LOG: failedCiLog(url).slice(-12000) },
       });
     } finally {
-      await fixBox.close();
+      await safeClose(fixBox);
     }
     sh("git", ["push", "-f", "origin", branch]);
   }
@@ -733,7 +762,7 @@ async function mainLoop(): Promise<void> {
         }
       }
     } finally {
-      await sandbox.close();
+      await safeClose(sandbox);
     }
 
     if (!commits) {
