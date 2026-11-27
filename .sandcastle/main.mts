@@ -47,6 +47,7 @@ import { join } from "node:path";
 import {
   type CiJob,
   CLAUDE_LIMIT,
+  ciStateOf,
   judgeNextStep,
   needsVisualJudge,
   parseJudgeVerdict,
@@ -545,34 +546,27 @@ if (process.env.DRY_RUN) {
 }
 
 // The token cannot read check rollups. Read the GitHub Actions runs for the PR head commit.
-function ciState(url: string): "none" | "pending" | "success" | "failure" {
+function ciState(url: string, expected?: string): ReturnType<typeof ciStateOf> {
   const sha = spawnSync(
     "gh",
     ["pr", "view", url, "--json", "headRefOid", "--jq", ".headRefOid"],
     { encoding: "utf8" },
   ).stdout.trim();
+  if (expected && sha !== expected) return "pending";
   const out = spawnSync(
     "gh",
     ["run", "list", "--commit", sha, "--json", "status,conclusion"],
     { encoding: "utf8" },
   ).stdout;
-  let runs: { status: string; conclusion: string }[] = [];
   try {
-    runs = JSON.parse(out || "[]");
+    return ciStateOf(sha, expected, JSON.parse(out || "[]"));
   } catch {
     return "pending";
   }
-  if (runs.length === 0) return "none";
-  if (runs.some((r) => r.status !== "completed")) return "pending";
-  return runs.every(
-    (r) => r.conclusion === "success" || r.conclusion === "skipped",
-  )
-    ? "success"
-    : "failure";
 }
-async function waitCi(url: string): Promise<boolean> {
+async function waitCi(url: string, expected?: string): Promise<boolean> {
   for (let i = 0; i < 120; i++) {
-    const st = ciState(url);
+    const st = ciState(url, expected);
     if (st === "success") return true;
     if (st === "failure") return false;
     await sleepUntil(Date.now() + 15_000);
@@ -734,8 +728,9 @@ async function waitCiWithFixes(
   issueNumber: number,
 ): Promise<boolean> {
   const args = { PROJECT, ISSUE: String(issueNumber), BRANCH: branch };
+  let pushed: string | undefined;
   for (let attempt = 0; attempt <= MAX_FIX_ATTEMPTS; attempt++) {
-    if (await waitCi(url)) return true;
+    if (await waitCi(url, pushed)) return true;
     if (attempt === MAX_FIX_ATTEMPTS) break;
     console.log(`CI failed for ${url}. Fixer attempt ${attempt + 1}.`);
     spawnSync("git", ["fetch", "origin", branch]);
@@ -757,6 +752,7 @@ async function waitCiWithFixes(
       await safeClose(fixBox);
     }
     sh("git", ["push", "-f", "origin", branch]);
+    pushed = sh("git", ["rev-parse", branch]).trim();
   }
   return false;
 }

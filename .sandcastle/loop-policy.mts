@@ -380,3 +380,20 @@ export function redactSecrets(text: string): string {
     .replace(/\b(github_pat_|gh[pousr]_)[A-Za-z0-9_]{10,}/g, "$1***")
     .replace(/(Bearer\s+)\S+/gi, "$1***");
 }
+
+// CI state of a PR head (2026-11-27). Right after a push, `gh pr view` can still return the
+// old head, whose run failed; the loop then saw "failure" for a commit that CI had not run
+// yet. With `expected` (the pushed SHA) an older head counts as pending.
+export type CiState = "none" | "pending" | "success" | "failure";
+export function ciStateOf(
+  prHead: string,
+  expected: string | undefined,
+  runs: readonly { status: string; conclusion: string }[],
+): CiState {
+  if (expected && prHead !== expected) return "pending";
+  if (runs.length === 0) return "none";
+  if (runs.some((r) => r.status !== "completed")) return "pending";
+  return runs.every((r) => r.conclusion === "success" || r.conclusion === "skipped")
+    ? "success"
+    : "failure";
+}
