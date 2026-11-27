@@ -18,7 +18,8 @@ Another agent wrote the code. You do not write code. You only look and judge.
 2. Take the screenshots: `node .sandcastle/visual-shots.mjs http://localhost:4173/cemetery-run-demo/ test-results/judge`. Also run `npm run test:e2e` if the issue names e2e screenshots (`test-results/screens/`).
 3. Open (Read tool) each screenshot. Open the target images in `docs/targets/` and the frames in `docs/ref/` that match each moment (intro road = target-1 and ref-01; start screen = target-2; driving = target-3 and ref-03, ref-07; zombie hit = target-4; chapel = target-5; end screen = target-6). Read `docs/VISUAL_REFERENCE.md`.
 4. Compare each screenshot with its target, model by model: hearse, graves and candles, chapel, wall and gate, trees, zombies (if the game has them), ground and path, sky, fog and light, camera angle, HUD. Check each "Visual match" acceptance criterion of the issue.
-5. Read `test-results/judge/track.json`: if the hearse drives into an obstacle, it must stop or slide and not pass through.
+5. Read `test-results/judge/track.json`: the hearse must never pass through a solid obstacle.
+   If the issue has a "Playtest" criterion: also run `node .sandcastle/playtest.mjs test-results/playtest http://localhost:4173/cemetery-run-demo/` (Playwright video in `test-results/playtest/video/`, track in `test-results/playtest/track.json`). Open a few frames of the run and compare the track with the numbers of the issue and of `docs/playtest/README.md` (speed kept after a wall hit by angle, no sticky contact: no run of more than 3 samples at speed 0 while a key is held, graves break and the hearse drives on). Write each miss as a gap.
 6. Write `.sandcastle/context/judge.md`:
 
 ```
