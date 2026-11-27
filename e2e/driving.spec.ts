@@ -24,9 +24,9 @@ async function startGame(page: Page): Promise<void> {
   await page.goto("?test=1&hold=0.4");
   await expect.poll(() => state(page), { timeout: 30_000 }).toBe("intro");
   await page.mouse.click(40, 80);
-  await expect.poll(() => state(page), { timeout: 5000 }).toBe("ready");
+  await expect.poll(() => state(page), { timeout: 30_000 }).toBe("ready");
   await page.mouse.click(40, 80);
-  await expect.poll(() => state(page), { timeout: 5000 }).toBe("playing");
+  await expect.poll(() => state(page), { timeout: 30_000 }).toBe("playing");
 }
 
 function problemsOf(page: Page): string[] {

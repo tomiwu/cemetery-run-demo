@@ -58,6 +58,11 @@ export const PALETTE = {
   /** Derived: fog and moon colours of the game scene. */
   gameFog: "#5a4f58",
   moon: "#a9b4d6",
+  /** Map: grass (the surface colour with a slight green tint) and road strips (the border colour). */
+  mapGrass: "#242621",
+  mapRoad: "#3A3734",
+  /** Derived: bare earth of the graves. */
+  mapEarth: "#4A4034",
   /** UI palette (Candle Graphite). */
   uiBackground: "#161513",
 } as const;
