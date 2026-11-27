@@ -486,9 +486,18 @@ export function buildHearse(): HearseModel {
 
   glassParts.push(windscreenGeometry());
   // Rear window of the tall tailgate.
-  const rearGlass = new BoxGeometry(1.5, 0.34, 0.01);
-  rearGlass.translate(0, 1.33, -(FRONT_FACE + GLASS_OFFSET));
+  const rearZ = -(FRONT_FACE + GLASS_OFFSET);
+  const rearGlass = new BoxGeometry(1.5, 0.38, 0.01);
+  rearGlass.translate(0, 1.3, rearZ);
   glassParts.push(rearGlass);
+  // A thin chrome line around the rear glass.
+  const frameZ = rearZ - 0.006;
+  chromeParts.push(
+    box(1.56, 0.025, 0.012, 0, 1.1, frameZ),
+    box(1.56, 0.025, 0.012, 0, 1.495, frameZ),
+    box(0.025, 0.4, 0.012, -0.765, 1.3, frameZ),
+    box(0.025, 0.4, 0.012, 0.765, 1.3, frameZ),
+  );
 
   // Bumpers, chrome strips and the grille (bars only, no emblem).
   for (const sign of [-1, 1]) {

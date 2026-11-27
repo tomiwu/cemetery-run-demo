@@ -60,6 +60,7 @@ export function skyDome(
   spread = 0.55,
   mid?: Color,
   glow?: Color,
+  glowStop = 0.26,
 ): Mesh {
   const geometry = new SphereGeometry(SKY_RADIUS, 20, 12);
   const position = geometry.getAttribute("position");
@@ -73,7 +74,7 @@ export function skyDome(
         ]
       : [
           [0, low],
-          [0.26, glow ?? low],
+          [glowStop, glow ?? low],
           [0.5, mid ?? high],
           [1, high],
         ];

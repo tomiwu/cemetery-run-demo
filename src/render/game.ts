@@ -80,9 +80,10 @@ export function createGameScene(
   const sky = skyDome(
     new Color(PALETTE.haze),
     new Color(PALETTE.skyTop),
-    0.4,
+    0.75,
     new Color(PALETTE.skyMiddle),
     new Color(PALETTE.horizonGlow),
+    0.2,
   );
   scene.add(sky);
 
@@ -173,12 +174,15 @@ export function createGameScene(
   hearse.group.traverse((object) => {
     if (object instanceof Mesh) {
       object.castShadow = true;
-      // The glossy paint shows more of the dusk sky from above (roof and bonnet).
+      // The glossy paint shows the dusk sky on the roof and the bonnet. Glass and chrome
+      // also reflect it, so the windows read against the black paint.
+      const material = object.material as MeshStandardMaterial;
       if (object.name === "body") {
-        const paint = object.material as MeshStandardMaterial;
-        paint.envMapIntensity = 3.6;
-        paint.metalness = 0.9;
-        paint.color.set(PALETTE.hearseSheen);
+        material.envMapIntensity = 3.2;
+      } else if (object.name === "window") {
+        material.envMapIntensity = 3.5;
+      } else if (object.name === "chrome") {
+        material.envMapIntensity = 2.4;
       }
     }
   });

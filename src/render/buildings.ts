@@ -164,6 +164,25 @@ function addChapel(
     color: brick,
   });
 
+  // Brick lines: thin dark mortar courses on the walls and on the front gable.
+  const mortar = mixColor(brick, "#000000", 0.32);
+  for (let y = 0.7; y < wallHeight - 0.45; y += 0.3) {
+    scenery.add(new BoxGeometry(w + 0.03, 0.035, d + 0.03), {
+      x: cx,
+      y,
+      z: cz,
+      color: mortar,
+    });
+  }
+  for (let h = 0.15; h < rise - 0.3; h += 0.3) {
+    scenery.add(new BoxGeometry(w * (1 - h / rise) - 0.1, 0.035, 0.39), {
+      x: cx,
+      y: wallHeight + h,
+      z: front - 0.155,
+      color: mortar,
+    });
+  }
+
   // Bell tower on the front of the ridge: brick, open arches, a spire and a cross.
   const towerZ = front - 1.5;
   const towerBase = wallHeight + rise - 0.5;
@@ -513,10 +532,12 @@ function addLampPosts(
       z: post.z,
       color: PALETTE.iron,
     });
-    glow.add(new BoxGeometry(0.28, 0.4, 0.28), {
+    // A 4-sided glass lantern head, 0.35 m high, narrower at the foot.
+    glow.add(new CylinderGeometry(0.26, 0.19, 0.35, 4), {
       x: post.x,
-      y: height + 0.25,
+      y: height + 0.245,
       z: post.z,
+      turn: Math.PI / 4,
       color: PALETTE.headlight,
     });
     scenery.add(new ConeGeometry(0.28, 0.24, 4), {
