@@ -80,8 +80,6 @@ function roundTree(
 }
 
 export interface Trees {
-  /** The tree line and the trees along the walls that do not block the camera. */
-  mesh: Mesh;
   /** The trees of the map: one mesh each, so that one can fade when it hides the hearse. */
   fadeables: Fadeable[];
   group: Group;
@@ -185,8 +183,8 @@ export function buildTrees(map: CemeteryMap, seed: number): Trees {
       }
     }
   }
-  const mesh = new Mesh(batch.build(), treeMaterial());
-  mesh.name = "tree-line";
-  group.add(mesh);
-  return { mesh, fadeables, group };
+  const line = new Mesh(batch.build(), treeMaterial());
+  line.name = "tree-line";
+  group.add(line);
+  return { fadeables, group };
 }

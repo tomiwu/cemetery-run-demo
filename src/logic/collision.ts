@@ -236,10 +236,8 @@ export function resolveHearse(
     shape,
     e: shape.kind === "box" ? cc.restitution.wall : cc.restitution.tree,
   }));
-  const groundSpeed = Math.hypot(
-    hearseVelocity(state).x,
-    hearseVelocity(state).z,
-  );
+  const velocity = hearseVelocity(state);
+  const groundSpeed = Math.hypot(velocity.x, velocity.z);
   const start = hearseCircles(state);
   let factor = 1;
   for (const grave of graves) {
