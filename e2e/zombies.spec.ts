@@ -53,11 +53,12 @@ test("zombies appear between the graves and walk to the chapel", async ({
   expect(later).toBeDefined();
   expect(later?.z ?? 0).toBeLessThan((first?.z ?? 0) - 0.2);
 
-  // Let a group of zombies walk, then steer the hearse next to them, until at least 4 zombies
+  // Wait for a group of 4 zombies (the least that the shot needs; software WebGL on a slow
+  // runner spawns slowly), then steer the hearse next to them, until at least 4 zombies
   // are inside the camera frame. The hearse stays about 8 m south of the group.
   await expect
     .poll(async () => (await zombies(page)).length, { timeout: 90_000 })
-    .toBeGreaterThanOrEqual(6);
+    .toBeGreaterThanOrEqual(4);
   let held = "";
   const hold = async (key: string): Promise<void> => {
     if (key !== held) {
