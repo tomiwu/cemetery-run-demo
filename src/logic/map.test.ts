@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CONFIG } from "../config";
-import { circleVsBox, resolveHearse, type Shape } from "./collision";
-import { stepHearse } from "./hearse";
+import { hearseCircles, pushOut, resolveHearse, type Shape } from "./collision";
+import { stepHearse, type HearseState } from "./hearse";
 import { buildMap, type Rect } from "./map";
 
 const map = buildMap(CONFIG.map);
@@ -21,6 +21,15 @@ function distanceToRect(x: number, z: number, rect: Rect): number {
   const dz = Math.max(rect.minZ - z, 0, z - rect.maxZ);
   return Math.hypot(dx, dz);
 }
+
+/** The graves as circles: they are not in `map.obstacles`. */
+const graveCircles = (): Shape[] =>
+  map.graves.map((grave) => ({
+    kind: "circle",
+    x: grave.x,
+    z: grave.z,
+    r: M.graves.radius,
+  }));
 
 const onRoad = (x: number, z: number, margin: number): boolean =>
   map.roads.some((road) => distanceToRect(x, z, road) < margin);
@@ -119,7 +128,7 @@ describe("buildMap", () => {
     expect(onRoad(start.x, start.z, 0.001)).toBe(true);
     for (const shape of map.obstacles) {
       expect(distanceToShape(start.x, start.z, shape)).toBeGreaterThan(
-        CONFIG.hearse.radius,
+        CONFIG.collision.colliderOffset + CONFIG.collision.colliderRadius,
       );
     }
   });
@@ -132,6 +141,9 @@ describe("buildMap", () => {
 
   it("has grave rows on the grass, not on a road", () => {
     expect(map.graves.length).toBeGreaterThan(50);
+    expect(map.graves.map((grave) => grave.id)).toEqual(
+      map.graves.map((_, index) => index),
+    );
     for (const item of [
       ...map.graves,
       ...map.trees,
@@ -166,6 +178,37 @@ describe("buildMap", () => {
     }
   });
 
+  it("keeps the grave centres 5.0 m apart in a row and 5.5 m between rows", () => {
+    expect(
+      map.obstacles.some(
+        (shape) =>
+          shape.kind === "circle" &&
+          shape.r === M.graves.radius &&
+          map.graves.some(
+            (grave) => grave.x === shape.x && grave.z === shape.z,
+          ),
+      ),
+    ).toBe(false);
+    for (const [i, a] of map.graves.entries()) {
+      for (const b of map.graves.slice(i + 1)) {
+        const dx = Math.abs(a.x - b.x);
+        const dz = Math.abs(a.z - b.z);
+        const sameRow = dz < M.graves.rowSpacing / 2;
+        const sameColumn = dx < M.graves.columnSpacing / 2;
+        if (sameRow && !sameColumn) {
+          expect(dx).toBeGreaterThanOrEqual(5.0);
+        }
+        if (sameColumn && !sameRow) {
+          expect(dz).toBeGreaterThanOrEqual(5.5);
+        }
+        // The gap between two graves is wide enough for the hearse (3.8 m).
+        expect(Math.hypot(dx, dz) - 2 * M.graves.radius).toBeGreaterThanOrEqual(
+          3.8,
+        );
+      }
+    }
+  });
+
   it("has 12 to 20 spawn points between the graves", () => {
     expect(map.spawnPoints.length).toBeGreaterThanOrEqual(12);
     expect(map.spawnPoints.length).toBeLessThanOrEqual(20);
@@ -178,7 +221,7 @@ describe("buildMap", () => {
       expect(onRoad(point.x, point.z, M.spawns.roadMargin)).toBe(false);
       expect(Math.abs(point.x)).toBeLessThan(M.width / 2);
       expect(Math.abs(point.z)).toBeLessThan(M.length / 2);
-      for (const shape of map.obstacles) {
+      for (const shape of [...map.obstacles, ...graveCircles()]) {
         expect(distanceToShape(point.x, point.z, shape)).toBeGreaterThanOrEqual(
           1.5,
         );
@@ -195,35 +238,42 @@ describe("buildMap", () => {
   });
 });
 
+const HEARSE = { ...CONFIG.hearse, knockDecay: CONFIG.collision.knockDecay };
+
 describe("driving on the map", () => {
   const dt = CONFIG.logicStepSeconds;
-  const radius = CONFIG.hearse.radius;
+  const R = CONFIG.collision.colliderRadius;
+  const reach = CONFIG.collision.colliderOffset + R;
 
   function run(
     heading: number,
     input: { x: number; y: number },
     steps: number,
-    from = map.hearseStart,
-  ): { x: number; z: number; speed: number; heading: number }[] {
-    let state = { x: from.x, z: from.z, heading, speed: 0 };
-    const track: (typeof state)[] = [];
+    from: { x: number; z: number } = map.hearseStart,
+    obstacles: readonly Shape[] = map.obstacles,
+  ): HearseState[] {
+    let state: HearseState = { x: from.x, z: from.z, heading, speed: 0 };
+    const track: HearseState[] = [];
     for (let i = 0; i < steps; i += 1) {
       state = resolveHearse(
-        stepHearse(state, input, dt, CONFIG.hearse),
-        radius,
-        map.obstacles,
+        stepHearse(state, input, dt, HEARSE),
+        dt,
+        obstacles,
         map.bounds,
-      );
+      ).hearse;
       track.push(state);
     }
     return track;
   }
 
-  it("drives up the main road to the chapel and stops there", () => {
+  it("drives up the main road to the chapel and bounces off it without going in", () => {
     const track = run(Math.PI, { x: 0, y: 1 }, 1200);
+    const doorZ = map.chapel.z + map.chapel.depth / 2;
+    for (const state of track) {
+      expect(state.z).toBeGreaterThanOrEqual(doorZ + reach - 1e-6);
+    }
     const end = track[track.length - 1];
-    expect(end?.speed).toBe(0);
-    expect(end?.z).toBeCloseTo(map.chapel.z + map.chapel.depth / 2 + radius, 1);
+    expect(end?.z).toBeLessThan(doorZ + reach + 1.5);
   });
 
   it("drives the loop: the hearse can go around a field on the roads", () => {
@@ -235,7 +285,7 @@ describe("driving on the map", () => {
     ] as const;
     // A hearse circle on the centre line of each leg touches no obstacle.
     const free = (x: number, z: number): boolean =>
-      map.obstacles.every((shape) => distanceToShape(x, z, shape) >= radius);
+      map.obstacles.every((shape) => distanceToShape(x, z, shape) >= R);
     for (let i = 0; i < corners.length; i += 1) {
       const a = corners[i];
       const b = corners[(i + 1) % corners.length];
@@ -250,50 +300,49 @@ describe("driving on the map", () => {
     }
   });
 
-  it("stops at a gravestone", () => {
-    const grave = map.obstacles.find(
-      (shape) =>
-        shape.kind === "circle" &&
-        shape.r === M.graves.radius &&
-        shape.x < -M.graves.firstColumn,
-    );
-    if (grave?.kind !== "circle") {
-      throw new Error("No gravestone.");
+  it("drives between two grave columns without touching a grave", () => {
+    const x = -(M.graves.firstColumn + M.graves.columnSpacing / 2);
+    const track = run(0, { x: 0, y: -1 }, 600, { x, z: -35 }, [
+      ...map.obstacles,
+      ...graveCircles(),
+    ]);
+    expect(track[track.length - 1]?.z).toBeGreaterThan(25);
+    // The gate lamps (south) are not part of this check.
+    for (const state of track.filter((item) => item.z < 30)) {
+      expect(Math.abs(state.x - x)).toBeLessThan(0.01);
+      for (const grave of map.graves) {
+        for (const circle of [
+          { x: state.x, z: state.z + 1.3 },
+          { x: state.x, z: state.z - 1.3 },
+        ]) {
+          expect(
+            Math.hypot(circle.x - grave.x, circle.z - grave.z),
+          ).toBeGreaterThan(R + M.graves.radius);
+        }
+      }
     }
-    // Drive east along the row line toward the stone from the main road side.
-    const from = { x: -3, z: grave.z, heading: 0 };
-    const track = run(-Math.PI / 2, { x: -1, y: 0 }, 400, from);
-    const end = track[track.length - 1];
-    expect(end?.speed).toBe(0);
-    expect(end?.x).toBeGreaterThan(grave.x);
   });
 
-  it("stops at the side wall and at the north wall", () => {
+  it("slides along the side wall and the north wall, and never leaves the walls", () => {
     const side = run(Math.PI / 2, { x: 1, y: 0 }, 900);
     const sideEnd = side[side.length - 1];
-    expect(sideEnd?.x).toBeLessThanOrEqual(M.width / 2 - radius + 1e-6);
-    expect(sideEnd?.speed).toBe(0);
+    expect(sideEnd?.x).toBeLessThanOrEqual(M.width / 2 - reach + 1e-6);
+    expect(sideEnd?.x).toBeGreaterThan(M.width / 2 - reach - 1.5);
     for (const heading of [Math.PI / 2, -Math.PI / 2, 0, Math.PI]) {
       const input = { x: Math.sin(heading), y: -Math.cos(heading) };
       for (const point of run(heading, input, 1500)) {
-        expect(Math.abs(point.x)).toBeLessThanOrEqual(
-          M.width / 2 - radius + 1e-6,
-        );
-        expect(point.z).toBeLessThanOrEqual(M.length / 2 - radius + 1e-6);
-        expect(point.z).toBeGreaterThanOrEqual(-M.length / 2 + radius - 1e-6);
+        expect(Math.abs(point.x)).toBeLessThanOrEqual(M.width / 2 - R + 1e-6);
+        expect(point.z).toBeLessThanOrEqual(M.length / 2 - R + 1e-6);
+        expect(point.z).toBeGreaterThanOrEqual(-M.length / 2 + R - 1e-6);
       }
     }
   });
 
   it("does not get stuck at the start", () => {
+    const start = { ...map.hearseStart, speed: 0 };
     expect(
-      map.obstacles.some(
-        (shape) =>
-          shape.kind === "box" &&
-          circleVsBox(
-            { x: map.hearseStart.x, z: map.hearseStart.z, r: radius },
-            shape,
-          ) !== null,
+      map.obstacles.some((shape) =>
+        hearseCircles(start).some((body) => pushOut(body, shape) !== null),
       ),
     ).toBe(false);
   });

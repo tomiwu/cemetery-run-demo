@@ -45,6 +45,10 @@ let previousHearse: HearseState = world.hearse;
 let accumulator = 0;
 let rounds = 0;
 let rng = createRandom(CONFIG.spawn.seed);
+/** The last bump event and the number of bumps (test hook). */
+let lastBump: { x: number; z: number; impact: number; count: number } | null =
+  null;
+let bumpCount = 0;
 /** Players who ask for less motion get no camera shake. */
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -73,6 +77,8 @@ function send(event: SessionEvent): void {
       accumulator = 0;
       input.reset();
       game.snap(world.hearse);
+      game.resetGraves();
+      lastBump = null;
     }
     screens.show(state);
   }
@@ -128,6 +134,29 @@ if (query.get("test") === "1") {
       frozenProgress = value;
     },
     hearse: () => ({ ...world.hearse }),
+    graves: () => world.graves.map((grave) => ({ ...grave })),
+    lastBump: () => (lastBump === null ? null : { ...lastBump }),
+    placeHearse: (x, z, heading, speed) => {
+      world = { ...world, hearse: { x, z, heading, speed } };
+      previousHearse = world.hearse;
+      accumulator = 0;
+      game.snap(world.hearse);
+    },
+    advance: (seconds, vector) => {
+      // Fixed logic steps, so that the result does not depend on the frame rate.
+      const steps = Math.round(seconds / CONFIG.logicStepSeconds);
+      for (let i = 0; i < steps; i += 1) {
+        previousHearse = world.hearse;
+        world = stepWorld(
+          world,
+          vector ?? { x: 0, y: 0 },
+          CONFIG.logicStepSeconds,
+          rng,
+        );
+        showEvents(world);
+      }
+      return { ...world.hearse };
+    },
     zombies: () => world.zombies.map((zombie) => ({ ...zombie })),
     gameLoaded: () => gameLoaded,
     drawCalls: () => lastDrawCalls,
@@ -170,18 +199,36 @@ if (query.get("test") === "1") {
 
 let lastFrame: number | null = null;
 
-/** Start the pop effect and the camera shake for the hits of one logic step. */
+/** Shake the camera, except for players who ask for less motion. */
+function shake(amplitude: number, seconds: number): void {
+  if (!reducedMotion.matches) {
+    game.shake(amplitude, seconds);
+  }
+}
+
+/** Start the effects for the events of one logic step: pop, bump, grave break. */
 function showEvents(current: World): void {
   for (const event of current.events) {
-    if (event.type !== "zombieHit") {
-      continue;
-    }
-    const zombie = current.zombies.find((item) => item.id === event.id);
-    if (zombie !== undefined) {
-      game.pop(zombie);
-    }
-    if (!reducedMotion.matches) {
-      game.shake(CONFIG.hit.shake.amplitude, CONFIG.hit.shake.seconds);
+    if (event.type === "zombieHit") {
+      const zombie = current.zombies.find((item) => item.id === event.id);
+      if (zombie !== undefined) {
+        game.pop(zombie);
+      }
+      shake(CONFIG.hit.shake.amplitude, CONFIG.hit.shake.seconds);
+    } else if (event.type === "bump") {
+      bumpCount += 1;
+      lastBump = {
+        x: event.x,
+        z: event.z,
+        impact: event.impact,
+        count: bumpCount,
+      };
+      const { amplitude, maxAmplitude, seconds } = CONFIG.collision.shake;
+      shake(Math.min(maxAmplitude, (amplitude * event.impact) / 10), seconds);
+      game.puff(event.x, event.z);
+    } else if (event.type === "graveBroken") {
+      game.breakGrave(event.id, event.x, event.z);
+      shake(CONFIG.graveHit.shake.amplitude, CONFIG.graveHit.shake.seconds);
     }
   }
   screens.setScore(current.score);

@@ -31,6 +31,8 @@ import {
 import { groundGeometry } from "./landscape";
 import { buildTrees } from "./trees";
 import { createPopLayer } from "./pop";
+import { createBreakLayer } from "./graveBreak";
+import { createFader } from "./occlusion";
 import { createZombieLayer } from "./zombies";
 import type { Zombie } from "../logic/zombies";
 import { PALETTE } from "./palette";
@@ -48,6 +50,8 @@ const LOOK_HEIGHT = 0.4;
  */
 const LOOK_SIDE = (-CONFIG.camera.lookAhead / CONFIG.camera.offset.z) * 0.85;
 const SHADOW_SIZE = 18;
+/** Height of the point on the hearse that the fade test looks at. */
+const FADE_TARGET_HEIGHT = 0.8;
 const MOON_OFFSET = new Vector3(-14, 26, 10);
 
 export interface GameScene {
@@ -63,6 +67,12 @@ export interface GameScene {
   ) => void;
   /** A zombie was hit: start the pop effect. */
   pop: (zombie: Zombie) => void;
+  /** A grave broke: the stone goes, stone pieces and dust fly, rubble stays, the candle goes out. */
+  breakGrave: (id: number, x: number, z: number) => void;
+  /** A new round: all graves stand again and all candles burn. */
+  resetGraves: () => void;
+  /** The hearse bumped a wall or a tree: a small dust puff. */
+  puff: (x: number, z: number) => void;
   /** Shake the camera: a small height in metres for a short time in seconds. */
   shake: (amplitude: number, seconds: number) => void;
   /** Put the camera at once at its place for this state (no smooth follow). */
@@ -122,7 +132,10 @@ export function createGameScene(
   const graves = buildGraves(map.graves, CONFIG.map.seed + 31);
   scene.add(graves.group);
   scene.add(pumpkinMesh(map.pumpkins));
-  scene.add(buildTrees(map, CONFIG.map.seed + 61));
+  const trees = buildTrees(map, CONFIG.map.seed + 61);
+  scene.add(trees.group);
+  // Trees and lamp posts that are between the camera and the hearse fade out.
+  const fader = createFader([...trees.fadeables, ...buildings.fadeables]);
 
   // Candle lanterns on the graves and at the chapel door (the candle slots of the map).
   const mainRoad = map.roads[0];
@@ -143,7 +156,8 @@ export function createGameScene(
       size: 1.5,
     })),
   ];
-  scene.add(lanternMeshes(lanterns, true));
+  const lanternLayer = lanternMeshes(lanterns, true);
+  scene.add(lanternLayer.group);
 
   // Low ground fog between the graves.
   const fogRandom = createRandom(CONFIG.map.seed + 77);
@@ -187,6 +201,8 @@ export function createGameScene(
   scene.add(zombieLayer.group);
   const popLayer = createPopLayer(CONFIG.spawn.seed + 101);
   scene.add(popLayer.group);
+  const breakLayer = createBreakLayer(CONFIG.spawn.seed + 131);
+  scene.add(breakLayer.group);
 
   // Cool blue fill from the sky, a warm ground bounce.
   scene.add(new AmbientLight(0x7a7f9c, 0.8));
@@ -278,6 +294,11 @@ export function createGameScene(
       camera.position.y += shakeAmplitude * fade * Math.sin(shakeClock * 90);
       camera.position.x += shakeAmplitude * fade * Math.cos(shakeClock * 70);
     }
+    // The camera stays inside the wall plus a margin, so that the wall top does not cover the hearse.
+    const reachX = CONFIG.map.width / 2 + CONFIG.camera.wallMargin;
+    const reachZ = CONFIG.map.length / 2 + CONFIG.camera.wallMargin;
+    camera.position.x = Math.min(Math.max(camera.position.x, -reachX), reachX);
+    camera.position.z = Math.min(Math.max(camera.position.z, -reachZ), reachZ);
     camera.lookAt(focus);
     sky.position.copy(camera.position);
   }
@@ -289,11 +310,26 @@ export function createGameScene(
   ): void {
     placeHearse(state, frameSeconds);
     popLayer.update(frameSeconds);
+    breakLayer.update(frameSeconds);
     zombieLayer.update(zombies, frameSeconds, popLayer.squashed());
     wanted.copy(anchor).add(offset);
     const k = 1 - Math.exp(-CONFIG.camera.follow * Math.max(0, frameSeconds));
     base.lerp(wanted, k);
     pointCamera(Math.max(0, frameSeconds));
+    fader.update(
+      camera.position,
+      { x: state.x, y: FADE_TARGET_HEIGHT, z: state.z },
+      frameSeconds,
+    );
+  }
+
+  function breakGrave(id: number, x: number, z: number): void {
+    graves.breakGrave(id);
+    breakLayer.breakAt(x, z);
+    const index = lanterns.findIndex((lantern) => lantern.graveId === id);
+    if (index >= 0) {
+      lanternLayer.extinguish(index);
+    }
   }
 
   function shake(amplitude: number, seconds: number): void {
@@ -331,6 +367,12 @@ export function createGameScene(
     loaded,
     update,
     pop: popLayer.hit,
+    breakGrave,
+    resetGraves: () => {
+      graves.reset();
+      lanternLayer.relight();
+    },
+    puff: breakLayer.puffAt,
     shake,
     snap,
     resize,

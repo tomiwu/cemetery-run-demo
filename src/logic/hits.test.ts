@@ -16,20 +16,24 @@ function zombie(x: number, z: number, id = 1): Zombie {
 }
 
 const hearse = (speed: number) => ({ x: 0, z: 0, heading: 0, speed });
-const REACH = CONFIG.hearse.radius + CONFIG.hit.zombieRadius;
+const REACH = CONFIG.collision.colliderRadius + CONFIG.hit.zombieRadius;
+const OFFSET = CONFIG.collision.colliderOffset;
+/** Distance from the middle line of the hearse body (heading 0). */
+const fromCircles = (x: number, z: number): number =>
+  Math.hypot(x, z - Math.min(OFFSET, Math.max(-OFFSET, z)));
 const none = () => false;
 
 describe("resolveHits", () => {
   it("pops a zombie that touches the hearse at hit speed", () => {
     const result = resolveHits(
       hearse(CONFIG.hit.minSpeed),
-      [zombie(0, -REACH + 0.1)],
+      [zombie(REACH - 0.1, -OFFSET)],
       none,
     );
     expect(result.zombies[0]?.state).toBe("popped");
     expect(result.scoreAdded).toBe(CONFIG.hit.score);
     expect(result.events).toEqual([
-      { type: "zombieHit", id: 1, x: 0, z: -REACH + 0.1 },
+      { type: "zombieHit", id: 1, x: REACH - 0.1, z: -OFFSET },
     ]);
   });
 
@@ -49,7 +53,7 @@ describe("resolveHits", () => {
   });
 
   it("does not hit a zombie that is outside the circles", () => {
-    const far = zombie(0, -REACH - 0.01);
+    const far = zombie(REACH + 0.01, OFFSET);
     const result = resolveHits(hearse(8), [far], none);
     expect(result.zombies).toEqual([far]);
     expect(result.events).toEqual([]);
@@ -66,7 +70,7 @@ describe("resolveHits", () => {
     );
     const moved = result.zombies[0];
     expect(moved?.state).toBe("walking");
-    expect(Math.hypot(moved?.x ?? 0, moved?.z ?? 0)).toBeGreaterThanOrEqual(
+    expect(fromCircles(moved?.x ?? 0, moved?.z ?? 0)).toBeGreaterThanOrEqual(
       REACH - 1e-9,
     );
     expect(result.events).toEqual([]);

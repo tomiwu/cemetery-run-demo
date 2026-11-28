@@ -51,7 +51,7 @@ test("the cemetery map has at most 120 draw calls and the hearse stays inside th
   expect(calls).toBeGreaterThan(0);
   expect(calls).toBeLessThanOrEqual(120);
 
-  // Drive to the right. The side wall stops the hearse: the hearse centre stays 1.4 m inside.
+  // Drive to the right. The side wall holds the hearse: its circles stay inside the walls.
   await page.keyboard.down("d");
   await expect
     .poll(async () => (await hearse(page)).x, { timeout: 90_000 })
@@ -59,7 +59,7 @@ test("the cemetery map has at most 120 draw calls and the hearse stays inside th
   await page.waitForTimeout(1500);
   await page.keyboard.up("d");
   const stopped = await hearse(page);
-  expect(stopped.x).toBeLessThanOrEqual(30 - 1.4 + 0.01);
+  expect(stopped.x).toBeLessThanOrEqual(30 - 1.0 + 0.01);
 
   expect(problems).toEqual([]);
 });

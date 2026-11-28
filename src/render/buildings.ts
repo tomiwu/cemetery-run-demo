@@ -18,6 +18,7 @@ import type { CemeteryMap, LightpostPlacement } from "../logic/map";
 import { createRandom } from "../logic/random";
 import { GeometryBatch, mixColor } from "./geometry";
 import { patches, type Spot } from "./glow";
+import type { Fadeable } from "./occlusion";
 import { PALETTE } from "./palette";
 
 /**
@@ -36,6 +37,8 @@ export interface Buildings {
   group: Group;
   /** Real warm lights: two at the chapel door and two at the gate lamps. */
   lights: PointLight[];
+  /** The lamp posts: each is its own mesh, so that it can fade when it hides the hearse. */
+  fadeables: Fadeable[];
 }
 
 /** A tall arch shape that faces +z (front) or +x (side): a box with a half-round top. */
@@ -495,14 +498,19 @@ function addGate(
   return lamps;
 }
 
-/** Iron lamp posts with a warm glass head. Slim, so they do not hide the near view. */
+/**
+ * Iron lamp posts with a warm glass head. Slim, so they do not hide the near view. Each post is
+ * two small meshes (iron and glass) with their own materials, so that the post can fade.
+ */
 function addLampPosts(
   posts: readonly LightpostPlacement[],
-  scenery: GeometryBatch,
-  glow: GeometryBatch,
-): Spot[] {
+  group: Group,
+): { pools: Spot[]; fadeables: Fadeable[] } {
   const pools: Spot[] = [];
+  const fadeables: Fadeable[] = [];
   for (const post of posts) {
+    const scenery = new GeometryBatch();
+    const glow = new GeometryBatch();
     // The lamps near the gate are low: they are close to the camera and must not hide the view.
     const height = post.lit ? 2.5 : 1.0;
     scenery.add(new CylinderGeometry(0.17, 0.22, 0.3, 6), {
@@ -542,9 +550,27 @@ function addLampPosts(
       z: post.z,
       color: PALETTE.iron,
     });
+    const iron = new MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.9,
+      flatShading: true,
+    });
+    const glass = new MeshBasicMaterial({ vertexColors: true });
+    const ironMesh = new Mesh(scenery.build(), iron);
+    ironMesh.name = "lamp-post";
+    const glassMesh = new Mesh(glow.build(), glass);
+    glassMesh.name = "lamp-glass";
+    group.add(ironMesh, glassMesh);
+    fadeables.push({
+      x: post.x,
+      z: post.z,
+      radius: 0.4,
+      height: height + 0.9,
+      materials: [iron, glass],
+    });
     pools.push({ x: post.x, y: 0.045, z: post.z, size: post.lit ? 7 : 4.5 });
   }
-  return pools;
+  return { pools, fadeables };
 }
 
 export function buildBuildings(map: CemeteryMap): Buildings {
@@ -554,7 +580,8 @@ export function buildBuildings(map: CemeteryMap): Buildings {
   const glow = new GeometryBatch();
   addWalls(map, scenery);
   const gateLamps = addGate(map, scenery, glow);
-  const lampPools = addLampPosts(map.lightposts, scenery, glow);
+  const lampPosts = addLampPosts(map.lightposts, group);
+  const lampPools = lampPosts.pools;
 
   // The chapel is its own mesh: it casts a shadow.
   const chapelScenery = new GeometryBatch();
@@ -622,5 +649,5 @@ export function buildBuildings(map: CemeteryMap): Buildings {
     lights.push(light);
   }
   group.add(...lights);
-  return { group, lights };
+  return { group, lights, fadeables: lampPosts.fadeables };
 }

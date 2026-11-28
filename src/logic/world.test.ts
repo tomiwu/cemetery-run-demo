@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CONFIG } from "../config";
 import { buildMap } from "./map";
 import { createRandom } from "./random";
+import { blocked } from "./zombies";
 import { createWorld, stepWorld, type World } from "./world";
 
 const map = buildMap(CONFIG.map);
@@ -51,7 +52,7 @@ describe("stepWorld", () => {
   it("stops the hearse at the wall", () => {
     const world = run(createWorld(map), 12, createRandom(1), { x: 1, y: 0 });
     expect(world.hearse.x).toBeLessThanOrEqual(
-      CONFIG.map.width / 2 - CONFIG.hearse.radius + 1e-9,
+      CONFIG.map.width / 2 - CONFIG.collision.colliderRadius + 1e-9,
     );
   });
 
@@ -134,6 +135,13 @@ describe("stepWorld", () => {
   });
 });
 
+/** A distance ahead of the hearse where a zombie touches the front circle. */
+const TOUCH_AHEAD =
+  CONFIG.collision.colliderOffset +
+  CONFIG.collision.colliderRadius +
+  CONFIG.hit.zombieRadius -
+  0.3;
+
 /** A walking zombie `metres` in front of the hearse. */
 function zombieAhead(world: World, metres: number): World {
   const { x, z, heading } = world.hearse;
@@ -185,7 +193,7 @@ describe("hits in stepWorld", () => {
   it("does not stop the hearse: it keeps 95 % of its speed for a hit", () => {
     let world = createWorld(map);
     world = { ...world, hearse: { ...world.hearse, speed: 8 } };
-    world = zombieAhead(world, CONFIG.hearse.radius + 0.2);
+    world = zombieAhead(world, TOUCH_AHEAD);
     const stepped = stepWorld(world, { x: 0, y: 1 }, STEP, createRandom(1));
     const free = stepWorld(
       { ...world, zombies: [] },
@@ -201,7 +209,7 @@ describe("hits in stepWorld", () => {
   });
 
   it("pushes a zombie aside, with no score, when the hearse is slow", () => {
-    let world = zombieAhead(createWorld(map), CONFIG.hearse.radius + 0.2);
+    let world = zombieAhead(createWorld(map), TOUCH_AHEAD);
     world = { ...world, hearse: { ...world.hearse, speed: 1 } };
     const stepped = stepWorld(world, NO_INPUT, STEP, createRandom(1));
     expect(stepped.score).toBe(0);
@@ -210,11 +218,125 @@ describe("hits in stepWorld", () => {
     expect(zombie?.state).toBe("walking");
     expect(
       Math.hypot(
-        (zombie?.x ?? 0) - stepped.hearse.x,
-        (zombie?.z ?? 0) - stepped.hearse.z,
+        (zombie?.x ?? 0) -
+          stepped.hearse.x -
+          Math.sin(stepped.hearse.heading) * CONFIG.collision.colliderOffset,
+        (zombie?.z ?? 0) -
+          stepped.hearse.z -
+          Math.cos(stepped.hearse.heading) * CONFIG.collision.colliderOffset,
       ),
     ).toBeGreaterThanOrEqual(
-      CONFIG.hearse.radius + CONFIG.hit.zombieRadius - 1e-6,
+      CONFIG.collision.colliderRadius + CONFIG.hit.zombieRadius - 1e-6,
     );
+  });
+});
+
+describe("graves in stepWorld", () => {
+  const first = map.graves[0];
+  if (first === undefined) {
+    throw new Error("No grave.");
+  }
+  const grave = first;
+  /** The hearse 3 m north of the grave (row 0), heading south (+z), at this speed. */
+  function approach(speed: number): World {
+    const world = createWorld(map);
+    return {
+      ...world,
+      hearse: { x: grave.x, z: grave.z - 3, heading: 0, speed },
+    };
+  }
+
+  it("starts with all graves standing", () => {
+    const world = createWorld(map);
+    expect(world.graves).toHaveLength(map.graves.length);
+    expect(world.graves.every((item) => item.state === "standing")).toBe(true);
+  });
+
+  it("breaks a grave at 10 m/s, sends one event, keeps 75 % of the speed and drives on", () => {
+    let world = approach(10);
+    const events: unknown[] = [];
+    const rng = createRandom(1);
+    let speedAtBreak = 0;
+    for (let i = 0; i < 30; i += 1) {
+      world = stepWorld(world, { x: 0, y: -1 }, STEP, rng);
+      const broke = world.events.filter((e) => e.type === "graveBroken");
+      if (broke.length > 0 && speedAtBreak === 0) {
+        speedAtBreak = world.hearse.speed;
+      }
+      events.push(...broke);
+    }
+    expect(
+      events.filter((event) => (event as { id: number }).id === grave.id),
+    ).toEqual([{ type: "graveBroken", id: grave.id, x: grave.x, z: grave.z }]);
+    expect(world.graves[grave.id]?.state).toBe("broken");
+    // The hearse passed the grave.
+    expect(world.hearse.z).toBeGreaterThan(grave.z);
+    expect(speedAtBreak).toBeCloseTo(7.5, 6);
+    expect(world.hearse.speed).toBeGreaterThan(7);
+  });
+
+  it("keeps the broken grave broken and not in the way", () => {
+    const world = approach(10);
+    const first = run(world, 0.6, createRandom(1), { x: 0, y: -1 });
+    const back = {
+      ...first,
+      hearse: { x: grave.x, z: grave.z - 3, heading: 0, speed: 8 },
+    };
+    const second = run(back, 0.6, createRandom(1), { x: 0, y: -1 });
+    expect(second.hearse.z).toBeGreaterThan(grave.z + 1);
+    expect(second.events.some((e) => e.type === "bump")).toBe(false);
+  });
+
+  it("does not break a grave at 2 m/s", () => {
+    let world = approach(2);
+    const rng = createRandom(1);
+    for (let i = 0; i < 120; i += 1) {
+      world = stepWorld(world, { x: 0, y: -0.2 }, STEP, rng);
+      expect(world.events.some((e) => e.type === "graveBroken")).toBe(false);
+    }
+    expect(world.graves[grave.id]?.state).toBe("standing");
+  });
+
+  it("never breaks the target grave", () => {
+    let world: World = { ...approach(10), targetGrave: grave.id };
+    const rng = createRandom(1);
+    for (let i = 0; i < 30; i += 1) {
+      world = stepWorld(world, { x: 0, y: -1 }, STEP, rng);
+    }
+    expect(world.graves[grave.id]?.state).toBe("standing");
+  });
+
+  it("lets the zombies walk through the rubble of a broken grave", () => {
+    const broken = createWorld(map).graves.map((item) =>
+      item.id === grave.id ? { ...item, state: "broken" as const } : item,
+    );
+    expect(blocked(map, grave.x, grave.z, broken)).toBe(false);
+    expect(blocked(map, grave.x, grave.z)).toBe(true);
+  });
+});
+
+describe("wall contact in stepWorld", () => {
+  it("gives one bump event for a head-on hit and no step with speed 0 twice in a row", () => {
+    let world = createWorld(map);
+    world = {
+      ...world,
+      hearse: {
+        x: map.bounds.maxX - 8,
+        z: 0,
+        heading: Math.PI / 2,
+        speed: 10,
+      },
+    };
+    const rng = createRandom(1);
+    let bumps = 0;
+    let zeroRun = 0;
+    for (let i = 0; i < 180; i += 1) {
+      world = stepWorld(world, { x: 1, y: 0 }, STEP, rng);
+      bumps += world.events.filter((e) => e.type === "bump").length;
+      zeroRun = world.hearse.speed === 0 ? zeroRun + 1 : 0;
+      expect(zeroRun).toBeLessThanOrEqual(1);
+    }
+    expect(bumps).toBeGreaterThanOrEqual(1);
+    expect(world.hearse.x).toBeLessThanOrEqual(map.bounds.maxX - 1 + 1e-6);
   });
 });

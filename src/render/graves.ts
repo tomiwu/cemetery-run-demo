@@ -165,18 +165,32 @@ export interface Lantern {
   red: boolean;
   /** Scale of the lantern. */
   size: number;
+  /** The grave that the lantern stands at. Its candle goes out when the grave breaks. */
+  graveId?: number;
 }
 
 export interface GraveLayer {
   group: Group;
   lanterns: Lantern[];
+  /** The grave breaks: the stone disappears and low rubble stays. */
+  breakGrave: (id: number) => void;
+  /** All graves stand again (a new round). */
+  reset: () => void;
+}
+
+export interface Lanterns {
+  group: Group;
+  /** The candle of lantern `index` goes out: no flame, no glow, dark glass. */
+  extinguish: (index: number) => void;
+  /** All candles burn again (a new round). */
+  relight: () => void;
 }
 
 /** Shared lantern shapes: an iron frame, and the glass body that takes a red or white colour. */
 export function lanternMeshes(
   items: readonly Lantern[],
   glowPools: boolean,
-): Group {
+): Lanterns {
   const group = new Group();
   group.name = "lanterns";
   const frameParts = new GeometryBatch();
@@ -252,6 +266,7 @@ export function lanternMeshes(
   flameMesh.name = "lantern-flame";
   group.add(frameMesh, glassMesh, flameMesh);
 
+  const glowMeshes: InstancedMesh[] = [];
   if (glowPools) {
     const pools: Spot[] = items.map((item) => ({
       x: item.x,
@@ -267,6 +282,7 @@ export function lanternMeshes(
     });
     pool.name = "candle-pools";
     group.add(pool);
+    glowMeshes.push(pool);
   }
   // A small soft glow around each flame (0.3 m), one draw call.
   const halo = patches(
@@ -280,7 +296,44 @@ export function lanternMeshes(
   );
   halo.name = "flame-glow";
   group.add(halo);
-  return group;
+  glowMeshes.push(halo);
+
+  const hidden = new Matrix4().makeScale(0, 0, 0);
+  const dark = new Color(PALETTE.iron);
+  /** The matrices of the lanterns that are out: [mesh, index, matrix]. */
+  const saved = new Map<number, [InstancedMesh, Matrix4][]>();
+  function extinguish(index: number): void {
+    if (saved.has(index)) {
+      return;
+    }
+    const parts: [InstancedMesh, Matrix4][] = [];
+    for (const mesh of [flameMesh, ...glowMeshes]) {
+      const matrix = new Matrix4();
+      mesh.getMatrixAt(index, matrix);
+      parts.push([mesh, matrix]);
+      mesh.setMatrixAt(index, hidden);
+      mesh.instanceMatrix.needsUpdate = true;
+    }
+    saved.set(index, parts);
+    glassMesh.setColorAt(index, dark);
+    if (glassMesh.instanceColor) {
+      glassMesh.instanceColor.needsUpdate = true;
+    }
+  }
+  function relight(): void {
+    for (const [index, parts] of saved) {
+      for (const [mesh, matrix] of parts) {
+        mesh.setMatrixAt(index, matrix);
+        mesh.instanceMatrix.needsUpdate = true;
+      }
+      glassMesh.setColorAt(index, items[index]?.red ? red : white);
+    }
+    if (glassMesh.instanceColor) {
+      glassMesh.instanceColor.needsUpdate = true;
+    }
+    saved.clear();
+  }
+  return { group, extinguish, relight };
 }
 
 /**
@@ -345,6 +398,39 @@ export function pathEdgeProps(
   return { group, lanterns };
 }
 
+/** Low rubble of a broken grave: a few flat stone chunks on a patch of earth. */
+function rubbleGeometry(): BufferGeometry {
+  const batch = new GeometryBatch();
+  batch.add(new BoxGeometry(0.9, 0.04, 0.6), {
+    y: 0.02,
+    color: PALETTE.mapEarth,
+  });
+  const chunks: readonly (readonly [
+    number,
+    number,
+    number,
+    number,
+    number,
+    string,
+  ])[] = [
+    [-0.22, 0.1, 0.1, 0.32, 0.5, "#7A7473"],
+    [0.2, -0.05, 0.2, 0.28, -0.4, "#8A8480"],
+    [0.02, 0.15, 0.14, 0.22, 1.1, "#6C6263"],
+    [-0.05, -0.15, 0.08, 0.2, 2.0, "#7A7473"],
+  ];
+  for (const [x, z, y, size, turn, color] of chunks) {
+    batch.add(new IcosahedronGeometry(1, 0), {
+      x,
+      y,
+      z,
+      scale: [size, size * 0.45, size * 0.8],
+      turn,
+      color,
+    });
+  }
+  return batch.build();
+}
+
 export function buildGraves(
   graves: readonly GravePlacement[],
   seed: number,
@@ -352,15 +438,23 @@ export function buildGraves(
   const random = createRandom(seed);
   const batch = new GeometryBatch();
   const lanterns: Lantern[] = [];
+  /** The vertices of each grave in the merged stone geometry. */
+  const ranges: { start: number; end: number }[] = [];
   for (const grave of graves) {
+    const start = batch.vertexCount;
     addStone(batch, grave, random);
+    ranges[grave.id] = { start, end: batch.vertexCount };
     const spot = lanternSpot(grave, random);
     if (spot !== null) {
-      lanterns.push({ ...spot, size: 1.15 });
+      lanterns.push({ ...spot, size: 1.15, graveId: grave.id });
     }
   }
+  const stoneGeometry = batch.build();
+  const original = Float32Array.from(
+    stoneGeometry.getAttribute("position").array,
+  );
   const stones = new Mesh(
-    batch.build(),
+    stoneGeometry,
     new MeshStandardMaterial({
       vertexColors: true,
       roughness: 0.95,
@@ -370,10 +464,57 @@ export function buildGraves(
   stones.name = "graves";
   const group = new Group();
   group.add(stones);
-  return { group, lanterns };
+
+  // One instance of rubble for each grave, hidden (scale 0) until the grave breaks.
+  const rubble = new InstancedMesh(
+    rubbleGeometry(),
+    new MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 1,
+      flatShading: true,
+    }),
+    Math.max(1, graves.length),
+  );
+  rubble.name = "rubble";
+  const matrix = new Matrix4();
+  matrix.makeScale(0, 0, 0);
+  for (let i = 0; i < graves.length; i += 1) {
+    rubble.setMatrixAt(i, matrix);
+  }
+  rubble.frustumCulled = false;
+  group.add(rubble);
+
+  function breakGrave(id: number): void {
+    const range = ranges[id];
+    const grave = graves[id];
+    if (range === undefined || grave === undefined) {
+      return;
+    }
+    // Squash all vertices of the stone to a point: the triangles vanish.
+    const position = stoneGeometry.getAttribute("position");
+    for (let i = range.start; i < range.end; i += 1) {
+      position.setXYZ(i, grave.x, -1, grave.z);
+    }
+    position.needsUpdate = true;
+    matrix.makeRotationY(grave.turn);
+    matrix.setPosition(grave.x, 0, grave.z + 0.2);
+    rubble.setMatrixAt(id, matrix);
+    rubble.instanceMatrix.needsUpdate = true;
+  }
+  function reset(): void {
+    const position = stoneGeometry.getAttribute("position");
+    position.array.set(original);
+    position.needsUpdate = true;
+    matrix.makeScale(0, 0, 0);
+    for (let i = 0; i < graves.length; i += 1) {
+      rubble.setMatrixAt(i, matrix);
+    }
+    rubble.instanceMatrix.needsUpdate = true;
+  }
+  return { group, lanterns, breakGrave, reset };
 }
 
-/** Small muted pumpkins between the graves (a collision circle each). */
+/** Small muted pumpkins at the graves (decoration, no collision). */
 export function pumpkinMesh(items: readonly Placement[]): Mesh {
   const batch = new GeometryBatch();
   for (const item of items) {

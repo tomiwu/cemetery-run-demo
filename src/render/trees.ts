@@ -1,10 +1,13 @@
 import {
   CylinderGeometry,
+  Group,
   IcosahedronGeometry,
   Mesh,
   MeshStandardMaterial,
 } from "three";
+import { CONFIG } from "../config";
 import type { CemeteryMap } from "../logic/map";
+import type { Fadeable } from "./occlusion";
 import { createRandom } from "../logic/random";
 import { GeometryBatch, mixColor } from "./geometry";
 import { PALETTE } from "./palette";
@@ -76,22 +79,68 @@ function roundTree(
   });
 }
 
-export function buildTrees(map: CemeteryMap, seed: number): Mesh {
+export interface Trees {
+  /** The trees of the map: one mesh each, so that one can fade when it hides the hearse. */
+  fadeables: Fadeable[];
+  group: Group;
+}
+
+function treeMaterial(): MeshStandardMaterial {
+  return new MeshStandardMaterial({
+    vertexColors: true,
+    roughness: 1,
+    flatShading: true,
+  });
+}
+
+export function buildTrees(map: CemeteryMap, seed: number): Trees {
   const random = createRandom(seed);
   const batch = new GeometryBatch();
   const halfWidth = map.bounds.maxX;
   const halfLength = map.bounds.maxZ;
 
-  // The trees of the map (they block the hearse): tall cypresses along the walls.
+  // The trees of the map (they block the hearse): tall cypresses along the walls. Each is its own
+  // mesh, so that it can fade when it is between the camera and the hearse.
+  const group = new Group();
+  group.name = "trees";
+  const fadeables: Fadeable[] = [];
   for (const tree of map.trees) {
-    poplar(batch, tree.x, tree.z, 8.5 + random() * 2.5, random(), 1.05);
+    const single = new GeometryBatch();
+    const height = 8.5 + random() * 2.5;
+    poplar(single, tree.x, tree.z, height, random(), 1.05);
+    const material = treeMaterial();
+    const mesh = new Mesh(single.build(), material);
+    mesh.name = "tree";
+    group.add(mesh);
+    fadeables.push({
+      x: tree.x,
+      z: tree.z,
+      radius: CONFIG.map.trees.radius,
+      height: 1.2 + height,
+      materials: [material],
+    });
   }
-  // A row of poplars just outside each wall.
+  // A row of poplars just outside each wall. Each is its own mesh and can fade, because the
+  // camera looks through this row at the walls.
+  const solo = (x: number, z: number, height: number, tone: number): void => {
+    const single = new GeometryBatch();
+    poplar(single, x, z, height, tone);
+    const material = treeMaterial();
+    const mesh = new Mesh(single.build(), material);
+    mesh.name = "wall-tree";
+    group.add(mesh);
+    fadeables.push({
+      x,
+      z,
+      radius: 1.2,
+      height: 1.2 + height,
+      materials: [material],
+    });
+  };
   const out = 3;
   for (let z = -halfLength - 1; z <= halfLength + 4; z += 5 + random() * 1.5) {
     for (const side of [-1, 1]) {
-      poplar(
-        batch,
+      solo(
         side * (halfWidth + out + random() * 0.8),
         z,
         9 + random() * 4,
@@ -100,21 +149,9 @@ export function buildTrees(map: CemeteryMap, seed: number): Mesh {
     }
   }
   for (let x = -halfWidth + 2; x <= halfWidth - 2; x += 5.5 + random() * 1.5) {
-    poplar(
-      batch,
-      x,
-      -halfLength - out - random() * 0.8,
-      9 + random() * 4,
-      random(),
-    );
+    solo(x, -halfLength - out - random() * 0.8, 9 + random() * 4, random());
     if (Math.abs(x) > 9) {
-      poplar(
-        batch,
-        x,
-        halfLength + out + random() * 0.8,
-        8 + random() * 3,
-        random(),
-      );
+      solo(x, halfLength + out + random() * 0.8, 8 + random() * 3, random());
     }
   }
   // A dark tree line behind: two rings of round and column trees.
@@ -149,14 +186,8 @@ export function buildTrees(map: CemeteryMap, seed: number): Mesh {
       }
     }
   }
-  const mesh = new Mesh(
-    batch.build(),
-    new MeshStandardMaterial({
-      vertexColors: true,
-      roughness: 1,
-      flatShading: true,
-    }),
-  );
-  mesh.name = "trees";
-  return mesh;
+  const line = new Mesh(batch.build(), treeMaterial());
+  line.name = "tree-line";
+  group.add(line);
+  return { fadeables, group };
 }

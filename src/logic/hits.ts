@@ -1,5 +1,5 @@
 import { CONFIG } from "../config";
-import { circleVsCircle } from "./collision";
+import { pushOutOfHearse } from "./collision";
 import type { HearseState } from "./hearse";
 import type { Zombie } from "./zombies";
 
@@ -31,16 +31,13 @@ export function resolveHits(
 ): HitResult {
   const events: ZombieHitEvent[] = [];
   const fast = hearse.speed >= CONFIG.hit.minSpeed;
-  const body = { x: hearse.x, z: hearse.z, r: CONFIG.hearse.radius };
   let speed = hearse.speed;
   const result = zombies.map((zombie): Zombie => {
     if (zombie.state !== "walking") {
       return zombie;
     }
-    const push = circleVsCircle(
-      { x: zombie.x, z: zombie.z, r: CONFIG.hit.zombieRadius },
-      body,
-    );
+    const mover = { x: zombie.x, z: zombie.z, r: CONFIG.hit.zombieRadius };
+    const push = pushOutOfHearse(mover, hearse);
     if (push === null) {
       return zombie;
     }

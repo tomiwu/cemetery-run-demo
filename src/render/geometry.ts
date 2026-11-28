@@ -40,6 +40,14 @@ export class GeometryBatch {
     return this.parts.length;
   }
 
+  /** Number of vertices so far. The merged geometry keeps the order of the parts. */
+  get vertexCount(): number {
+    return this.parts.reduce(
+      (total, part) => total + part.getAttribute("position").count,
+      0,
+    );
+  }
+
   add(source: BufferGeometry, options: PartOptions = {}): this {
     const geometry = source.index ? source.toNonIndexed() : source.clone();
     geometry.deleteAttribute("uv");

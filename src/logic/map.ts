@@ -26,6 +26,8 @@ export interface Placement extends Vec {
 }
 
 export interface GravePlacement extends Placement {
+  /** The index of the grave in `CemeteryMap.graves`. */
+  id: number;
   /** Which gravestone model to use, 0 up to `graves.variants - 1`. */
   variant: number;
   /** True when the grave has a stone border and not a plain mound. */
@@ -46,7 +48,7 @@ export interface CemeteryMap {
   /** The inside of the walls. */
   bounds: Box;
   roads: Rect[];
-  /** Everything that blocks the hearse: circles for trees and stones, boxes for walls and chapel. */
+  /** Everything that blocks the hearse: circles for trees and posts, boxes for walls and chapel. */
   obstacles: Shape[];
   /** The wall boxes (also in `obstacles`). */
   walls: Box[];
@@ -57,6 +59,7 @@ export interface CemeteryMap {
   chapel: { x: number; z: number; width: number; depth: number };
   candleSlots: Vec[];
   hearseStart: { x: number; z: number; heading: number };
+  /** The graves. They are not in `obstacles`: a fast hearse breaks them (see `world.ts`). */
   graves: GravePlacement[];
   trees: TreePlacement[];
   pumpkins: Placement[];
@@ -199,8 +202,7 @@ export function buildMap(cfg: MapConfig): CemeteryMap {
         if (skip) {
           continue;
         }
-        graves.push({ x, z, variant, turn, border });
-        obstacles.push(circle(x, z, g.radius));
+        graves.push({ id: graves.length, x, z, variant, turn, border });
       }
     }
   }
@@ -218,16 +220,16 @@ export function buildMap(cfg: MapConfig): CemeteryMap {
     },
   );
 
-  // Pumpkins between the graves of a row.
+  // Pumpkins at the front edge of a grave plot. They are decoration: no collision, so a small
+  // pumpkin never stops the hearse.
   const pumpkins: Placement[] = [];
   for (let i = 0; i < cfg.pumpkins.count; i += 1) {
     const side = i % 2 === 0 ? -1 : 1;
     const row = (2 * i + 1) % g.rows;
     const column = i % (g.columns - 1);
-    const x = side * (g.firstColumn + (column + 0.5) * g.columnSpacing);
-    const z = rowZ(row) + 0.9;
+    const x = side * (g.firstColumn + column * g.columnSpacing);
+    const z = rowZ(row) + 2.1;
     pumpkins.push({ x, z, turn: random() * Math.PI * 2 });
-    obstacles.push(circle(x, z, cfg.pumpkins.radius));
   }
 
   // Lightposts: four with a light at the inner corners of the loop road, two at the gate.
@@ -267,6 +269,12 @@ export function buildMap(cfg: MapConfig): CemeteryMap {
     });
   }
 
+  // Zombies keep away from the graves and from the obstacles.
+  const blockers: Shape[] = [
+    ...obstacles,
+    ...graves.map((grave) => circle(grave.x, grave.z, g.radius)),
+  ];
+
   // Spawn points: the free places in the gaps between the graves, spread over both fields.
   const candidates: Vec[] = [];
   // Zombies start in the near and middle rows (the south part), so several are in view.
@@ -275,7 +283,7 @@ export function buildMap(cfg: MapConfig): CemeteryMap {
     for (const side of [-1, 1]) {
       for (let k = -1; k <= 2 * g.columns - 2; k += 1) {
         const x = side * (g.firstColumn + (k * g.columnSpacing) / 2);
-        const free = obstacles.every(
+        const free = blockers.every(
           (shape) => distanceToShape(x, z, shape) >= cfg.spawns.clearance,
         );
         const offRoad = roads.every(
