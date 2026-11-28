@@ -413,10 +413,10 @@ function rubbleGeometry(): BufferGeometry {
     number,
     string,
   ])[] = [
-    [-0.22, 0.1, 0.1, 0.32, 0.5, PALETTE.stoneGrey],
-    [0.2, -0.05, 0.09, 0.28, -0.4, PALETTE.stoneBeige],
-    [0.02, 0.15, 0.07, 0.22, 1.1, PALETTE.stoneBase],
-    [-0.05, -0.15, 0.06, 0.2, 2.0, PALETTE.stoneGrey],
+    [-0.22, 0.1, 0.1, 0.32, 0.5, "#7A7473"],
+    [0.2, -0.05, 0.2, 0.28, -0.4, "#8A8480"],
+    [0.02, 0.15, 0.14, 0.22, 1.1, "#6C6263"],
+    [-0.05, -0.15, 0.08, 0.2, 2.0, "#7A7473"],
   ];
   for (const [x, z, y, size, turn, color] of chunks) {
     batch.add(new IcosahedronGeometry(1, 0), {

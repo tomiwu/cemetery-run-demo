@@ -57,7 +57,7 @@ describe("makePuff", () => {
       expect((DUST_COLORS as readonly string[]).includes(item.color)).toBe(
         true,
       );
-      expect(item.size).toBeLessThan(0.2);
+      expect(item.size).toBeLessThan(0.3);
     }
   });
 });

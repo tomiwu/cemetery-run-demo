@@ -59,7 +59,7 @@ export const CONFIG = {
     /** Camera shake of a wall or tree hit: metres for 10 m/s of impact, most metres, seconds. */
     shake: { amplitude: 0.04, maxAmplitude: 0.25, seconds: 0.15 },
     /** Dust puff of a bump: number of pieces. */
-    puffPieces: 6,
+    puffPieces: 9,
   },
   /** Graves break under the hearse (PRD D19). */
   graveHit: {
@@ -191,6 +191,8 @@ export const CONFIG = {
     wideFov: 62,
     maxFov: 85,
     /** Trees and lamp posts between the camera and the hearse fade to this opacity. */
+    /** The camera stays this far outside the inner face of the walls (metres). */
+    wallMargin: 1,
     occlusionOpacity: 0.3,
     /** Fade speed in opacity per second. */
     occlusionFadePerSecond: 6,

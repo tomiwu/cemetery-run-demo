@@ -294,6 +294,11 @@ export function createGameScene(
       camera.position.y += shakeAmplitude * fade * Math.sin(shakeClock * 90);
       camera.position.x += shakeAmplitude * fade * Math.cos(shakeClock * 70);
     }
+    // The camera stays inside the wall plus a margin, so that the wall top does not cover the hearse.
+    const reachX = CONFIG.map.width / 2 + CONFIG.camera.wallMargin;
+    const reachZ = CONFIG.map.length / 2 + CONFIG.camera.wallMargin;
+    camera.position.x = Math.min(Math.max(camera.position.x, -reachX), reachX);
+    camera.position.z = Math.min(Math.max(camera.position.z, -reachZ), reachZ);
     camera.lookAt(focus);
     sky.position.copy(camera.position);
   }

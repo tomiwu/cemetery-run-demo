@@ -129,8 +129,31 @@ test("a hearse at 10 m/s breaks a grave, keeps 75 % of its speed and drives on",
   expect(result.speedAtBreak).toBeCloseTo(7.5, 1);
   expect(result.movedOn).toBeGreaterThan(1.5);
   expect(result.bump).toBeNull();
-  // The pieces fly for 0.6 s: take the picture while they are in the air.
-  await page.waitForTimeout(100);
+  // A second break for the picture: the hearse drives away from the camera (heading PI, toward
+  // -z), so that the pieces show beside it. The picture is taken at once, while they fly.
+  await page.evaluate((grave) => {
+    const game = window.__game;
+    if (!game) {
+      throw new Error("The test hook is missing.");
+    }
+    const other = game
+      .graves()
+      .find((item) => item.state === "standing" && item.id !== grave.id);
+    if (other === undefined) {
+      throw new Error("No standing grave.");
+    }
+    game.placeHearse(other.x, other.z + 5, Math.PI, 10);
+    let steps = 0;
+    const before = game.graves().filter((item) => item.state === "broken");
+    while (
+      game.graves().filter((item) => item.state === "broken").length ===
+        before.length &&
+      steps < 120
+    ) {
+      game.advance(1 / 60, { x: 0, y: 1 });
+      steps += 1;
+    }
+  }, target);
   await page.screenshot({
     path: `test-results/screens/${testInfo.project.name}-grave-break.png`,
   });

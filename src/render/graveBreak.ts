@@ -24,6 +24,8 @@ import { PALETTE } from "./palette";
 export const STONE_COLORS = [PALETTE.stoneGrey, PALETTE.stoneBeige] as const;
 export const DUST_COLORS = [PALETTE.popDust, PALETTE.popEarth] as const;
 
+/** Side shift in metres of half of the puff pieces (the corners of the hearse). */
+const PUFF_SIDE = 1;
 const GROUND_Y = 0.05;
 const START_Y = 0.4;
 /** Share of the flight at the end in which a piece shrinks to nothing. */
@@ -41,6 +43,8 @@ export interface BreakPiece {
   spinY: number;
   spinZ: number;
   size: number;
+  /** Height at the start of the flight. */
+  startY: number;
   color: string;
 }
 
@@ -48,12 +52,19 @@ function piece(
   x: number,
   z: number,
   random: () => number,
-  kind: { out: number; up: number; size: number; colors: readonly string[] },
+  kind: {
+    out: number;
+    up: number;
+    size: number;
+    colors: readonly string[];
+    startY?: number;
+  },
   index: number,
 ): BreakPiece {
   const time = CONFIG.graveHit.flightSeconds;
   const angle = random() * Math.PI * 2;
   const out = kind.out * (0.5 + random());
+  const startY = kind.startY ?? START_Y;
   const vy = kind.up * (0.7 + random() * 0.6);
   return {
     x,
@@ -61,11 +72,12 @@ function piece(
     vx: Math.sin(angle) * out,
     vz: Math.cos(angle) * out,
     vy,
-    gravity: (2 * (START_Y + vy * time - GROUND_Y)) / (time * time),
+    gravity: (2 * (startY + vy * time - GROUND_Y)) / (time * time),
     spinX: (random() - 0.5) * 12,
     spinY: (random() - 0.5) * 12,
     spinZ: (random() - 0.5) * 12,
     size: kind.size * (0.7 + random() * 0.6),
+    startY,
     color: kind.colors[index % kind.colors.length] ?? PALETTE.stoneGrey,
   };
 }
@@ -104,20 +116,31 @@ export function makeBreak(
   return pieces;
 }
 
-/** A small dust puff of a bump at (x, z). */
+/**
+ * A dust puff of a bump at (x, z). The pieces start above the roof of the hearse. Half of them
+ * start at the sides of the contact point, so that they show beside the body.
+ */
 export function makePuff(
   x: number,
   z: number,
   random: () => number,
 ): BreakPiece[] {
   const pieces: BreakPiece[] = [];
+  const colors = [PALETTE.popDust, PALETTE.popDust, PALETTE.popEarth] as const;
   for (let i = 0; i < CONFIG.collision.puffPieces; i += 1) {
+    const side = i % 2 === 0 ? 0 : (i % 4 === 1 ? 1 : -1) * PUFF_SIDE;
     pieces.push(
       piece(
-        x,
+        x + side,
         z,
         random,
-        { out: 1.2, up: 1.8, size: 0.1, colors: DUST_COLORS },
+        {
+          out: 1.2,
+          up: 3,
+          size: 0.2,
+          colors,
+          startY: 1.6 + random() * 0.4,
+        },
         i,
       ),
     );
@@ -132,7 +155,7 @@ export function breakPosition(
 ): { x: number; y: number; z: number } {
   return {
     x: item.x + item.vx * age,
-    y: START_Y + item.vy * age - 0.5 * item.gravity * age * age,
+    y: item.startY + item.vy * age - 0.5 * item.gravity * age * age,
     z: item.z + item.vz * age,
   };
 }
