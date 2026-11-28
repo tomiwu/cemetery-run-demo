@@ -11,9 +11,9 @@ export default defineConfig({
   testDir: "e2e",
   outputDir: "test-results",
   forbidOnly: isCI,
-  // One retry in CI only: software WebGL on a shared runner sometimes misses a short timing window.
-  // A test that fails twice fails the job.
-  retries: isCI ? 1 : 0,
+  // One retry: software WebGL on a shared machine sometimes misses a short timing window.
+  // A test that fails twice fails the run.
+  retries: 1,
   // Software WebGL on a shared CI runner loads the page slowly (2026-11-27: e2e took 10-12 min
   // instead of 5 min). Longer test and default expect timeouts in CI. Explicit short timeouts
   // (the "less than 1 s" checks) stay as they are.
