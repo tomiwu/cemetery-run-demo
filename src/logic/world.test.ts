@@ -133,3 +133,88 @@ describe("stepWorld", () => {
     expect(known.size).toBeGreaterThan(5);
   });
 });
+
+/** A walking zombie `metres` in front of the hearse. */
+function zombieAhead(world: World, metres: number): World {
+  const { x, z, heading } = world.hearse;
+  const zombie = {
+    id: world.nextId,
+    x: x + Math.sin(heading) * metres,
+    z: z + Math.cos(heading) * metres,
+    heading: 0,
+    speed: 0,
+    state: "walking" as const,
+    side: 0,
+  };
+  return { ...world, zombies: [zombie], nextId: world.nextId + 1 };
+}
+
+describe("hits in stepWorld", () => {
+  it("pops a zombie and adds 1 to the score when the hearse drives into it", () => {
+    let world = zombieAhead(createWorld(map), 4);
+    const rng = createRandom(1);
+    const hits: unknown[] = [];
+    for (let i = 0; i < 60; i += 1) {
+      world = stepWorld(world, { x: 0, y: 1 }, STEP, rng);
+      hits.push(...world.events.filter((event) => event.type === "zombieHit"));
+    }
+    expect(hits).toHaveLength(1);
+    expect(world.score).toBe(1);
+    expect(world.zombies.some((zombie) => zombie.id === 1)).toBe(false);
+  });
+
+  it("keeps the popped zombie in the list for one step, then removes it", () => {
+    let world = zombieAhead(createWorld(map), 4);
+    const rng = createRandom(1);
+    let popStep: World | null = null;
+    for (let i = 0; i < 60 && popStep === null; i += 1) {
+      world = stepWorld(world, { x: 0, y: 1 }, STEP, rng);
+      if (world.events.some((event) => event.type === "zombieHit")) {
+        popStep = world;
+      }
+    }
+    expect(popStep?.zombies.find((z) => z.id === 1)?.state).toBe("popped");
+    const after = stepWorld(popStep ?? world, { x: 0, y: 1 }, STEP, rng);
+    expect(after.zombies.some((zombie) => zombie.id === 1)).toBe(false);
+    expect(after.events.some((event) => event.type === "zombieHit")).toBe(
+      false,
+    );
+    expect(after.score).toBe(1);
+  });
+
+  it("does not stop the hearse: it keeps 95 % of its speed for a hit", () => {
+    let world = createWorld(map);
+    world = { ...world, hearse: { ...world.hearse, speed: 8 } };
+    world = zombieAhead(world, CONFIG.hearse.radius + 0.2);
+    const stepped = stepWorld(world, { x: 0, y: 1 }, STEP, createRandom(1));
+    const free = stepWorld(
+      { ...world, zombies: [] },
+      { x: 0, y: 1 },
+      STEP,
+      createRandom(1),
+    );
+    expect(stepped.score).toBe(1);
+    expect(stepped.hearse.speed).toBeCloseTo(
+      free.hearse.speed * CONFIG.hit.speedFactor,
+      9,
+    );
+  });
+
+  it("pushes a zombie aside, with no score, when the hearse is slow", () => {
+    let world = zombieAhead(createWorld(map), CONFIG.hearse.radius + 0.2);
+    world = { ...world, hearse: { ...world.hearse, speed: 1 } };
+    const stepped = stepWorld(world, NO_INPUT, STEP, createRandom(1));
+    expect(stepped.score).toBe(0);
+    expect(stepped.events.filter((e) => e.type === "zombieHit")).toEqual([]);
+    const zombie = stepped.zombies[0];
+    expect(zombie?.state).toBe("walking");
+    expect(
+      Math.hypot(
+        (zombie?.x ?? 0) - stepped.hearse.x,
+        (zombie?.z ?? 0) - stepped.hearse.z,
+      ),
+    ).toBeGreaterThanOrEqual(
+      CONFIG.hearse.radius + CONFIG.hit.zombieRadius - 1e-6,
+    );
+  });
+});

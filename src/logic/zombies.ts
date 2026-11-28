@@ -75,7 +75,7 @@ export function spawnZombie(
   };
 }
 
-function blocked(map: CemeteryMap, x: number, z: number): boolean {
+export function blocked(map: CemeteryMap, x: number, z: number): boolean {
   const body = { x, z, r: CONFIG.zombie.radius };
   return map.obstacles.some((shape) => pushOut(body, shape) !== null);
 }

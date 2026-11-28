@@ -15,6 +15,7 @@ import type { Zombie } from "../logic/zombies";
 import { GeometryBatch } from "./geometry";
 import { patches } from "./glow";
 import { PALETTE } from "./palette";
+import type { Squashed } from "./pop";
 import { zombiePose } from "./zombieLook";
 
 /**
@@ -35,8 +36,15 @@ export interface ZombieLayer {
   group: Group;
   /** Resolves when the pool is ready. The figures are built in code, so this is at once. */
   loaded: Promise<void>;
-  /** Put the pool instances where the zombies are, and play the walk. */
-  update: (zombies: readonly Zombie[], frameSeconds: number) => void;
+  /**
+   * Put the pool instances where the zombies are, and play the walk. `squashed` are hit zombies
+   * that the pop effect squashes for a short time before they disappear.
+   */
+  update: (
+    zombies: readonly Zombie[],
+    frameSeconds: number,
+    squashed?: readonly Squashed[],
+  ) => void;
 }
 
 interface Part {
@@ -258,26 +266,39 @@ export function createZombieLayer(): ZombieLayer {
   const unit = new Vector3(1, 1, 1);
   const flat = new Matrix4();
 
-  function update(zombies: readonly Zombie[], frameSeconds: number): void {
+  function update(
+    zombies: readonly Zombie[],
+    frameSeconds: number,
+    squashed: readonly Squashed[] = [],
+  ): void {
     clock += Math.max(0, frameSeconds);
-    const walking = zombies.filter((zombie) => zombie.state === "walking");
+    const walking: { zombie: Zombie; squash: number }[] = zombies
+      .filter((zombie) => zombie.state === "walking")
+      .map((zombie) => ({ zombie, squash: 0 }));
+    walking.push(...squashed);
     const used = Math.min(walking.length, count);
     for (const part of parts) {
       part.mesh.count = used;
     }
     shadow.count = used;
     for (let i = 0; i < used; i += 1) {
-      const zombie = walking[i];
-      if (zombie === undefined) {
+      const entry = walking[i];
+      if (entry === undefined) {
         continue;
       }
+      const { zombie, squash } = entry;
       // Each zombie has its own place in the walk cycle.
       const pose = zombiePose(clock * STEP_RATE + zombie.id * 0.37);
       spin.setFromAxisAngle(axisY, zombie.heading + pose.sway);
       root.compose(
         place.set(zombie.x, pose.bob, zombie.z),
         spin,
-        unit.set(scale, scale, scale),
+        // A squashed zombie gets flat and wide.
+        unit.set(
+          scale * (1 + 0.5 * squash),
+          scale * (1 - 0.8 * squash),
+          scale * (1 + 0.5 * squash),
+        ),
       );
       for (const part of parts) {
         let angle: number;
@@ -306,7 +327,7 @@ export function createZombieLayer(): ZombieLayer {
         );
         part.mesh.setMatrixAt(i, local.premultiply(root));
       }
-      flat.makeScale(1.1, 1, 1.1);
+      flat.makeScale(1.1 + 0.4 * squash, 1, 1.1 + 0.4 * squash);
       flat.setPosition(zombie.x, 0.05, zombie.z);
       shadow.setMatrixAt(i, flat);
     }

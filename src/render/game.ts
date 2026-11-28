@@ -30,6 +30,7 @@ import {
 } from "./graves";
 import { groundGeometry } from "./landscape";
 import { buildTrees } from "./trees";
+import { createPopLayer } from "./pop";
 import { createZombieLayer } from "./zombies";
 import type { Zombie } from "../logic/zombies";
 import { PALETTE } from "./palette";
@@ -60,6 +61,10 @@ export interface GameScene {
     zombies: readonly Zombie[],
     frameSeconds: number,
   ) => void;
+  /** A zombie was hit: start the pop effect. */
+  pop: (zombie: Zombie) => void;
+  /** Shake the camera: a small height in metres for a short time in seconds. */
+  shake: (amplitude: number, seconds: number) => void;
   /** Put the camera at once at its place for this state (no smooth follow). */
   snap: (hearse: HearseState) => void;
   resize: (width: number, height: number) => void;
@@ -180,6 +185,8 @@ export function createGameScene(
 
   const zombieLayer = createZombieLayer();
   scene.add(zombieLayer.group);
+  const popLayer = createPopLayer(CONFIG.spawn.seed + 101);
+  scene.add(popLayer.group);
 
   // Cool blue fill from the sky, a warm ground bounce.
   scene.add(new AmbientLight(0x7a7f9c, 0.8));
@@ -233,6 +240,12 @@ export function createGameScene(
     CONFIG.camera.offset.z,
   );
   const focus = new Vector3();
+  /** The followed camera place, without the shake. */
+  const base = new Vector3();
+  let shakeAmplitude = 0;
+  let shakeSeconds = 0;
+  let shakeLeft = 0;
+  let shakeClock = 0;
   const anchor = new Vector3();
   const wanted = new Vector3();
   let wheelAngle = 0;
@@ -255,7 +268,16 @@ export function createGameScene(
     );
   }
 
-  function pointCamera(): void {
+  /** The camera is at the base place plus a small, fast shake that fades out. */
+  function pointCamera(frameSeconds: number): void {
+    camera.position.copy(base);
+    if (shakeLeft > 0) {
+      shakeClock += frameSeconds;
+      shakeLeft = Math.max(0, shakeLeft - frameSeconds);
+      const fade = shakeLeft / shakeSeconds;
+      camera.position.y += shakeAmplitude * fade * Math.sin(shakeClock * 90);
+      camera.position.x += shakeAmplitude * fade * Math.cos(shakeClock * 70);
+    }
     camera.lookAt(focus);
     sky.position.copy(camera.position);
   }
@@ -266,17 +288,25 @@ export function createGameScene(
     frameSeconds: number,
   ): void {
     placeHearse(state, frameSeconds);
-    zombieLayer.update(zombies, frameSeconds);
+    popLayer.update(frameSeconds);
+    zombieLayer.update(zombies, frameSeconds, popLayer.squashed());
     wanted.copy(anchor).add(offset);
     const k = 1 - Math.exp(-CONFIG.camera.follow * Math.max(0, frameSeconds));
-    camera.position.lerp(wanted, k);
-    pointCamera();
+    base.lerp(wanted, k);
+    pointCamera(Math.max(0, frameSeconds));
+  }
+
+  function shake(amplitude: number, seconds: number): void {
+    shakeAmplitude = amplitude;
+    shakeSeconds = Math.max(seconds, 1e-3);
+    shakeLeft = seconds;
   }
 
   function snap(state: HearseState): void {
     placeHearse(state, 0);
-    camera.position.copy(anchor).add(offset);
-    pointCamera();
+    base.copy(anchor).add(offset);
+    shakeLeft = 0;
+    pointCamera(0);
   }
 
   function resize(width: number, height: number): void {
@@ -295,5 +325,14 @@ export function createGameScene(
 
   snap({ ...map.hearseStart, speed: 0 });
   const loaded = zombieLayer.loaded;
-  return { scene, camera, loaded, update, snap, resize };
+  return {
+    scene,
+    camera,
+    loaded,
+    update,
+    pop: popLayer.hit,
+    shake,
+    snap,
+    resize,
+  };
 }
