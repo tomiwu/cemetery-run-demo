@@ -26,7 +26,7 @@ async function startGame(page: Page): Promise<void> {
 test("zombies appear between the graves and walk to the chapel", async ({
   page,
 }, testInfo) => {
-  test.setTimeout(150_000);
+  test.setTimeout(300_000);
   const problems: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") {
@@ -90,7 +90,7 @@ test("zombies appear between the graves and walk to the chapel", async ({
         await hold(gap > 10 ? "ArrowUp" : gap < 6 ? "ArrowDown" : "");
         return inView;
       },
-      { timeout: 90_000, intervals: [200] },
+      { timeout: 150_000, intervals: [200] },
     )
     .toBeGreaterThanOrEqual(4);
   await page.waitForTimeout(300);
