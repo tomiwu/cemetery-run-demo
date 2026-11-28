@@ -1,5 +1,6 @@
 import { CONFIG } from "../config";
 import { pushOut, type Vec } from "./collision";
+import type { Grave } from "./graves";
 import type { CemeteryMap } from "./map";
 
 /**
@@ -32,6 +33,8 @@ export interface ZombieWorld {
   zombies: readonly Zombie[];
   /** The id of the next zombie. */
   nextId: number;
+  /** The graves. Zombies keep away from the standing ones. Missing means all stand. */
+  graves?: readonly Grave[] | undefined;
 }
 
 /** Side steps to try when the straight way is blocked, in turn order. */
@@ -75,12 +78,34 @@ export function spawnZombie(
   };
 }
 
-export function blocked(map: CemeteryMap, x: number, z: number): boolean {
+/** True when a zombie at (x, z) would touch an obstacle or a standing grave. */
+export function blocked(
+  map: CemeteryMap,
+  x: number,
+  z: number,
+  graves?: readonly Grave[],
+): boolean {
   const body = { x, z, r: CONFIG.zombie.radius };
-  return map.obstacles.some((shape) => pushOut(body, shape) !== null);
+  if (map.obstacles.some((shape) => pushOut(body, shape) !== null)) {
+    return true;
+  }
+  const standing = (
+    graves ??
+    map.graves.map((grave) => ({ ...grave, state: "standing" as const }))
+  ).filter((grave) => grave.state === "standing");
+  const r = CONFIG.map.graves.radius;
+  return standing.some(
+    (grave) =>
+      pushOut(body, { kind: "circle", x: grave.x, z: grave.z, r }) !== null,
+  );
 }
 
-function stepZombie(zombie: Zombie, map: CemeteryMap, dt: number): Zombie {
+function stepZombie(
+  zombie: Zombie,
+  map: CemeteryMap,
+  graves: readonly Grave[] | undefined,
+  dt: number,
+): Zombie {
   const door = chapelDoor(map);
   const wanted = Math.atan2(door.x - zombie.x, door.z - zombie.z);
   const length = zombie.speed * dt;
@@ -95,7 +120,7 @@ function stepZombie(zombie: Zombie, map: CemeteryMap, dt: number): Zombie {
     const heading = wanted + attempt.turn;
     const x = zombie.x + Math.sin(heading) * length;
     const z = zombie.z + Math.cos(heading) * length;
-    if (!blocked(map, x, z)) {
+    if (!blocked(map, x, z, graves)) {
       const near =
         Math.hypot(door.x - x, door.z - z) <= CONFIG.zombie.arriveDistance;
       return {
@@ -124,7 +149,7 @@ export function stepZombies(
   const zombies = world.zombies
     .filter((zombie) => zombie.state === "walking")
     .map((zombie) => {
-      const moved = stepZombie(zombie, world.map, dt);
+      const moved = stepZombie(zombie, world.map, world.graves, dt);
       if (moved.state === "arrived") {
         events.push({ type: "zombieArrived", id: moved.id });
       }

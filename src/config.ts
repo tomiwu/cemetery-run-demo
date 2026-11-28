@@ -26,11 +26,57 @@ export const CONFIG = {
     /** Speed in m/s below which the turn rate is lower. */
     slowSpeed: 2,
     /** Share of the turn rate at speed 0 (0..1). */
-    slowTurnShare: 0.35,
+    slowTurnShare: 0.6,
     /** Longest logic step in seconds. */
     maxStepSeconds: 0.05,
-    /** Collision circle radius in metres. */
-    radius: 1.4,
+  },
+  /**
+   * Collision feel (PRD D22, docs/playtest/README.md). The hearse is two circles on the heading
+   * axis. A first contact keeps the part of the speed along the obstacle and reverses the rest.
+   */
+  collision: {
+    /** The two hearse circles: this far in front of and behind the middle, and their radius (m). */
+    colliderOffset: 1.3,
+    colliderRadius: 1.0,
+    /** Share of the speed along the obstacle that a first contact keeps. */
+    tangentKeep: 0.92,
+    /** Restitution: the share of the speed into the obstacle that comes back. */
+    restitution: { wall: 0.3, tree: 0.35, soft: 0 },
+    /** Least rebound speed in m/s of a hard hit (an impact of `bumpMinImpact` or more). */
+    minRebound: 1.5,
+    /** The hearse leaves an obstacle by the overlap plus this distance in metres. */
+    pushOutExtra: 0.02,
+    /** The rebound (knock-back) loses this much speed in m/s^2. */
+    knockDecay: 12,
+    /** A gap in the contact that is shorter than this (s) does not end the contact. */
+    contactGraceSeconds: 0.1,
+    /** Speed loss per second of a scrape that points into the wall (see `scrapeLoss`). */
+    scrapeDrag: 16,
+    /** Contact longer than `seconds` under `speed` m/s: an extra push out of `push` metres. */
+    unstick: { seconds: 0.25, speed: 1, push: 0.3 },
+    /** An impact (speed into the obstacle, m/s) of at least this gives a bump event. */
+    bumpMinImpact: 2,
+    /** Camera shake of a wall or tree hit: metres for 10 m/s of impact, most metres, seconds. */
+    shake: { amplitude: 0.04, maxAmplitude: 0.25, seconds: 0.15 },
+    /** Dust puff of a bump: number of pieces. */
+    puffPieces: 6,
+  },
+  /** Graves break under the hearse (PRD D19). */
+  graveHit: {
+    /** Least hearse speed in m/s that breaks a grave. Slower, the grave is a soft obstacle. */
+    breakSpeed: 3,
+    /** The hearse keeps this share of its speed for each grave that it breaks. */
+    speedFactor: 0.75,
+    /** Camera shake of a grave break: metres and seconds. */
+    shake: { amplitude: 0.08, seconds: 0.1 },
+    /** Stone pieces of one break: least and most. */
+    stonePieces: { min: 6, max: 10 },
+    /** Dust pieces of one break. */
+    dustPieces: 8,
+    /** Flight time of the pieces in seconds. */
+    flightSeconds: 0.6,
+    /** Breaks (and puffs) that can fly at the same time. */
+    maxBursts: 6,
   },
   /**
    * The cemetery map. x goes right, z goes toward the camera (south). The gate is in the
@@ -58,22 +104,25 @@ export const CONFIG = {
     /** Grave rows in each of the two fields. */
     graves: {
       columns: 4,
-      columnSpacing: 4,
+      /** Between the graves of a row. With the jitter, the centres stay 5.0 m or more apart. */
+      columnSpacing: 5.1,
       /** Centre of the first column from the main road centre line. */
-      firstColumn: 4.5,
-      rows: 10,
-      rowSpacing: 4.8,
-      firstRow: -22.5,
+      firstColumn: 3.4,
+      rows: 9,
+      /** Between two rows. With the jitter, the centres stay 5.5 m or more apart. */
+      rowSpacing: 5.6,
+      firstRow: -22.4,
       /** Largest random shift of a gravestone in metres. */
-      jitter: 0.25,
+      jitter: 0.05,
       /** Share of the graves that have no stone. */
       gap: 0.08,
       /** Number of different gravestone models. */
       variants: 7,
+      /** Radius of the grave circle in metres (a collision circle until it breaks). */
       radius: 0.6,
     },
     trees: { count: 13, radius: 1, variants: 3 },
-    pumpkins: { count: 5, radius: 0.3 },
+    pumpkins: { count: 5 },
     lightposts: { radius: 0.25 },
     /** Zombie spawn points. `clearance` is the least distance to any obstacle. */
     spawns: { count: 16, clearance: 1.5, roadMargin: 1 },
@@ -141,5 +190,11 @@ export const CONFIG = {
     fov: 50,
     wideFov: 62,
     maxFov: 85,
+    /** Trees and lamp posts between the camera and the hearse fade to this opacity. */
+    occlusionOpacity: 0.3,
+    /** Fade speed in opacity per second. */
+    occlusionFadePerSecond: 6,
+    /** Extra distance in metres around a prop that counts as in the way. */
+    occlusionMargin: 0.6,
   },
 } as const;

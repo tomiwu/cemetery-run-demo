@@ -48,3 +48,23 @@ Live site, main `86724b6` (after #6 zombies, before #7 and #27). Phone viewport 
 | Zombies           | Pop at 3 m/s or more: speed x 0.95. Under 3 m/s: pushed aside (and they can climb in, see the climb-in issue).                                                                 |
 | Camera shake      | Wall or tree: amplitude 0.04 m x impact (normal speed / 10), at most 0.25 m, 0.15 s. Grave break 0.08 m, 0.1 s. Zombie pop 0.04 m, 0.08 s. None with `prefers-reduced-motion`. |
 | Camera occlusion  | Trees and lamp posts between the camera and the hearse fade to 30 % opacity.                                                                                                   |
+
+# Collision playtest 2 (after #27)
+
+Same script, same phone viewport (`node .sandcastle/playtest.mjs`), same keys. Build with the new collision code (two hearse circles, bounce and slide, breakable graves).
+
+- Video: `playtest-2-live.webm`. Track: `playtest-2-track.json`. Frames: `playtest-2-frame-*.png`.
+- Software WebGL runs the game slower than real time (a frame can take about 1 s), so each test covers less game time than in playtest 1. Compare speeds and stops, not distances.
+
+## Before and after
+
+| Test                                   | Playtest 1 (before)                                          | Playtest 2 (after)                                                                                                                          |
+| -------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| East wall head-on at 10 m/s            | Speed 10 -> 0 in one step. No bounce.                        | The speed never stays at 0 (0 of 42 samples). The unit tests show the rebound of 3 m/s. The wall holds the hearse.                          |
+| Steer 45 degrees along the wall        | 0.0 m in 4 s. Speed 0 on every sample.                       | Speed above 0 on all 25 samples, up to 3.7 m/s. The hearse slides along the wall.                                                           |
+| Steer away from the wall               | 0.1 m in 5 s.                                                | The unit test shows that the hearse moves at once.                                                                                          |
+| Grave field (west, diagonal, south)    | The hearse stops at each grave. Speed 0 on 18 of 26 samples. | Graves break and the hearse drives on at 75 % of its speed. Speed 0 on 0 samples. Frame 06 shows rubble and stone pieces behind the hearse. |
+| Zombie chase                           | Speed 0 on 88 of 100 samples.                                | Speed 0 on 0 of 98 samples.                                                                                                                 |
+| Samples at speed 0 while a key is held | Many (see above).                                            | 0 of 387 samples. The longest run is 0 (the limit is 3).                                                                                    |
+
+Unit tests (game time, dt 1/60) hold the numbers: a wall at 30 degrees keeps 81 % of the speed, at 45 degrees 68 %. A head-on hit rebounds at 3 m/s and the hearse drives forward again within 0.5 s.

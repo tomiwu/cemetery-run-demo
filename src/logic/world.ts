@@ -1,5 +1,15 @@
 import { CONFIG } from "../config";
-import { resolveHearse } from "./collision";
+import {
+  resolveHearse,
+  type BumpEvent,
+  type GraveBrokenEvent,
+} from "./collision";
+import {
+  breakGraves,
+  createGraves,
+  standingBodies,
+  type Grave,
+} from "./graves";
 import { initialHearse, stepHearse, type HearseState } from "./hearse";
 import type { Vec2 } from "./input";
 import type { CemeteryMap } from "./map";
@@ -12,12 +22,20 @@ import {
   type ZombieArrivedEvent,
 } from "./zombies";
 
-export type WorldEvent = ZombieArrivedEvent | ZombieHitEvent;
+export type WorldEvent =
+  ZombieArrivedEvent | ZombieHitEvent | BumpEvent | GraveBrokenEvent;
+
+/** The hearse settings of the logic step: the motion numbers and the knock-back decay. */
+const HEARSE = { ...CONFIG.hearse, knockDecay: CONFIG.collision.knockDecay };
 
 /** The whole state of a round. `main.ts` changes it only with `stepWorld`. */
 export interface World {
   map: CemeteryMap;
   hearse: HearseState;
+  /** The graves: standing or broken. They are not in `map.obstacles`. */
+  graves: readonly Grave[];
+  /** The id of the dug target grave of a delivery. It never breaks. Null when there is none. */
+  targetGrave: number | null;
   zombies: Zombie[];
   /** Seconds of play. */
   time: number;
@@ -38,6 +56,8 @@ export function createWorld(map: CemeteryMap): World {
       map.hearseStart.z,
       map.hearseStart.heading,
     ),
+    graves: createGraves(map),
+    targetGrave: null,
     zombies: [],
     time: 0,
     spawnTimer: CONFIG.spawn.baseInterval,
@@ -54,15 +74,23 @@ export function stepWorld(
   dt: number,
   rng: () => number,
 ): World {
-  const driven = resolveHearse(
-    stepHearse(world.hearse, input, dt, CONFIG.hearse),
-    CONFIG.hearse.radius,
+  const resolved = resolveHearse(
+    stepHearse(world.hearse, input, dt, HEARSE),
+    dt,
     world.map.obstacles,
     world.map.bounds,
+    standingBodies(world.graves, world.targetGrave),
   );
-  const moved = stepZombies({ ...world, hearse: driven }, dt);
+  const driven = resolved.hearse;
+  const graves = breakGraves(
+    world.graves,
+    resolved.events.flatMap((event) =>
+      event.type === "graveBroken" ? [event.id] : [],
+    ),
+  );
+  const moved = stepZombies({ ...world, graves, hearse: driven }, dt);
   const hits = resolveHits(driven, moved.zombies, (x, z) =>
-    blocked(world.map, x, z),
+    blocked(world.map, x, z, graves),
   );
   const hearse = hits.hearse;
   let zombies = hits.zombies;
@@ -82,11 +110,13 @@ export function stepWorld(
   return {
     map: world.map,
     hearse,
+    graves,
+    targetGrave: world.targetGrave,
     zombies,
     time: world.time + dt,
     spawnTimer,
     nextId,
     score: world.score + hits.scoreAdded,
-    events: [...moved.events, ...hits.events],
+    events: [...resolved.events, ...moved.events, ...hits.events],
   };
 }
