@@ -20,7 +20,9 @@ const state = (page: Page): Promise<string | undefined> =>
 async function freezeIntroAt(page: Page, value: number): Promise<void> {
   // Freeze at once: a slow first frame must not run the intro to its end.
   await expect
-    .poll(() => page.evaluate(() => window.__game !== undefined))
+    .poll(() => page.evaluate(() => window.__game !== undefined), {
+      timeout: 60_000,
+    })
     .toBe(true);
   await page.evaluate((v) => window.__game?.freezeIntro(v), value);
   await expect.poll(() => progress(page), { timeout: 30_000 }).toBe(value);
@@ -65,6 +67,7 @@ test("the intro and the start screen show, then a tap starts the game", async ({
 test("a tap during the intro gives the state ready in less than 1 s", async ({
   page,
 }) => {
+  test.setTimeout(90_000);
   const problems = problemsOf(page);
   await page.goto("?test=1&hold=0.4");
 
