@@ -30,3 +30,16 @@ Side by side (live left, target right):
 ## Collision check (live, desktop, `ae87bda`)
 
 Collision with graves, trees, pumpkins, lamp posts and walls works: driving forward then left, the hearse stopped at x=-4.1, z=-15.9 (speed 0) at a grave. Problem: after the hit the hearse sticks. Forward, left+forward and right+forward moved it only about 0.5 m in 30 s. The collision sets the speed to 0 every step, so the hearse cannot slide along or turn away. There is no hit feedback (no bump, sound or shake).
+
+## Round 2 (2026-11-27, issue #26)
+
+Same shots after the look pass (`round-2-*.jpg`, same names as round 1 without the `live-` prefix):
+grass ground with narrow warm dirt paths, 3/4 chase camera (about 40 degrees down, view axis ahead of the
+hearse), upright light grey and beige headstones on stone bases, red and white candle lanterns with warm
+light pools, dark red brick chapel with a steep roof and bell tower, tall poplars and a dark tree line,
+dusk sky, low fog, brick wall with pillars, iron gate with lamps, low iron lamp posts and low-poly zombies.
+
+- `round-2-play-start--vs--target-5-chapel-candles.jpg`
+- `round-2-drive-forward--vs--target-3-driving.jpg`
+- `round-2-ready--vs--target-2-gate-start.jpg` (intro scene, not changed in this round)
+- `round-2-intro-0.5--vs--target-1-intro-road.jpg` (intro scene, not changed in this round)

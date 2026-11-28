@@ -53,25 +53,47 @@ test("zombies appear between the graves and walk to the chapel", async ({
   expect(later).toBeDefined();
   expect(later?.z ?? 0).toBeLessThan((first?.z ?? 0) - 0.2);
 
-  // Drive up the main road until a zombie is near, so that the screenshot shows one.
-  await page.keyboard.down("ArrowUp");
+  // Wait for a group of 4 zombies (the least that the shot needs; software WebGL on a slow
+  // runner spawns slowly), then steer the hearse next to them, until at least 4 zombies
+  // are inside the camera frame. The hearse stays about 8 m south of the group.
+  await expect
+    .poll(async () => (await zombies(page)).length, { timeout: 90_000 })
+    .toBeGreaterThanOrEqual(4);
+  let held = "";
+  const hold = async (key: string): Promise<void> => {
+    if (key !== held) {
+      if (held !== "") {
+        await page.keyboard.up(held);
+      }
+      if (key !== "") {
+        await page.keyboard.down(key);
+      }
+      held = key;
+    }
+  };
   await expect
     .poll(
       async () => {
-        const hearse = await page.evaluate(() => window.__game?.hearse());
-        return (await zombies(page)).some(
-          (zombie) =>
-            Math.hypot(
-              zombie.x - (hearse?.x ?? 0),
-              zombie.z - (hearse?.z ?? 0),
-            ) < 13,
+        const inView = await page.evaluate(
+          () => window.__game?.zombiesInView() ?? 0,
         );
+        if (inView >= 4) {
+          await hold("");
+          return inView;
+        }
+        const hearse = await page.evaluate(() => window.__game?.hearse());
+        const group = await zombies(page);
+        const meanZ =
+          group.reduce((sum, zombie) => sum + zombie.z, 0) /
+          Math.max(group.length, 1);
+        const gap = (hearse?.z ?? 0) - meanZ;
+        await hold(gap > 10 ? "ArrowUp" : gap < 6 ? "ArrowDown" : "");
+        return inView;
       },
-      { timeout: 90_000 },
+      { timeout: 90_000, intervals: [200] },
     )
-    .toBe(true);
-  await page.keyboard.up("ArrowUp");
-  await page.waitForTimeout(1500);
+    .toBeGreaterThanOrEqual(4);
+  await page.waitForTimeout(300);
   await page.screenshot({
     path: `test-results/screens/${testInfo.project.name}-zombies.png`,
   });
