@@ -101,6 +101,30 @@ export const CONFIG = {
     /** Height of the drawn zombie in metres. */
     height: 1.6,
   },
+  /** The hearse hits zombies (PRD section 3). */
+  hit: {
+    /** Least hearse speed in m/s for a hit. Slower, and a zombie is pushed aside. */
+    minSpeed: 3,
+    /** Radius in metres of the zombie circle for the hit test. */
+    zombieRadius: 0.5,
+    /** The hearse keeps this share of its speed for each zombie that it hits. */
+    speedFactor: 0.95,
+    /** Points for each zombie that pops. */
+    score: 1,
+    /** Camera shake on a hit: height in metres and time in seconds. */
+    shake: { amplitude: 0.04, seconds: 0.08 },
+  },
+  /** The pop effect (src/render/pop.ts). */
+  pop: {
+    /** The zombie squashes for this time in seconds, then it disappears. */
+    squashSeconds: 0.1,
+    /** Flight time of the leaves and dust pieces in seconds. */
+    burstSeconds: 0.7,
+    /** Number of pieces in one burst: least and most. */
+    pieces: { min: 14, max: 20 },
+    /** Bursts that can fly at the same time. The pool has this many times the most pieces. */
+    maxBursts: 8,
+  },
   /** Fixed logic step in seconds (60 steps per second). */
   logicStepSeconds: 1 / 60,
   /** Most logic steps in one frame. A very slow frame drops the rest of the time. */

@@ -7,6 +7,7 @@ import { introProgress } from "./logic/intro";
 import { buildMap } from "./logic/map";
 import { createRandom } from "./logic/random";
 import { initialState, next, type SessionEvent } from "./logic/session";
+import { chapelDoor } from "./logic/zombies";
 import { createWorld, stepWorld, type World } from "./logic/world";
 import { createGameScene } from "./render/game";
 import { createIntroScene } from "./render/intro";
@@ -44,6 +45,8 @@ let previousHearse: HearseState = world.hearse;
 let accumulator = 0;
 let rounds = 0;
 let rng = createRandom(CONFIG.spawn.seed);
+/** Players who ask for less motion get no camera shake. */
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 function resize(): void {
   const width = window.innerWidth;
@@ -65,6 +68,7 @@ function send(event: SessionEvent): void {
       rounds += 1;
       rng = createRandom(CONFIG.spawn.seed + rounds);
       world = createWorld(map);
+      screens.setScore(world.score);
       previousHearse = world.hearse;
       accumulator = 0;
       input.reset();
@@ -127,6 +131,30 @@ if (query.get("test") === "1") {
     zombies: () => world.zombies.map((zombie) => ({ ...zombie })),
     gameLoaded: () => gameLoaded,
     drawCalls: () => lastDrawCalls,
+    score: () => world.score,
+    placeZombieAhead: () => {
+      const { x, z, heading } = world.hearse;
+      const door = chapelDoor(map);
+      const ahead = {
+        x: x + Math.sin(heading) * 4,
+        z: z + Math.cos(heading) * 4,
+      };
+      world = {
+        ...world,
+        zombies: [
+          ...world.zombies,
+          {
+            id: world.nextId,
+            ...ahead,
+            heading: Math.atan2(door.x - ahead.x, door.z - ahead.z),
+            speed: CONFIG.spawn.baseSpeed,
+            state: "walking",
+            side: 0,
+          },
+        ],
+        nextId: world.nextId + 1,
+      };
+    },
     zombiesInView: () => {
       game.camera.updateMatrixWorld();
       const point = new Vector3();
@@ -142,6 +170,23 @@ if (query.get("test") === "1") {
 
 let lastFrame: number | null = null;
 
+/** Start the pop effect and the camera shake for the hits of one logic step. */
+function showEvents(current: World): void {
+  for (const event of current.events) {
+    if (event.type !== "zombieHit") {
+      continue;
+    }
+    const zombie = current.zombies.find((item) => item.id === event.id);
+    if (zombie !== undefined) {
+      game.pop(zombie);
+    }
+    if (!reducedMotion.matches) {
+      game.shake(CONFIG.hit.shake.amplitude, CONFIG.hit.shake.seconds);
+    }
+  }
+  screens.setScore(current.score);
+}
+
 /** Run the logic in fixed steps and return the share of the next step that is left. */
 function stepLogic(frameSeconds: number): number {
   const step = CONFIG.logicStepSeconds;
@@ -151,6 +196,7 @@ function stepLogic(frameSeconds: number): number {
   while (accumulator >= step) {
     previousHearse = world.hearse;
     world = stepWorld(world, input.vector(), step, rng);
+    showEvents(world);
     accumulator -= step;
   }
   return accumulator / step;

@@ -4,4 +4,5 @@ export const STRINGS = {
   tapToSkip: "Tap to skip",
   tapToStart: "Tap to start",
   controlHint: "Drag anywhere to drive",
+  score: "Score",
 } as const;

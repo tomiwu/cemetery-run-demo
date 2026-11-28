@@ -25,6 +25,10 @@ export const PALETTE = {
   headstone: "#6C6263",
   candle: "#F2B45A",
   candleGlow: "#AC7D4F",
+  /** Pop effect pieces: ochre dust, brown earth, dry leaf (no red). */
+  popDust: "#B5A993",
+  popEarth: "#6B4E2E",
+  popLeaf: "#C07A2C",
   hearseBody: "#0E0E0F",
   hearseHighlight: "#5A5354",
   /** Derived: paint colour of the game hearse. It is lighter, so the sky shows on the roof. */

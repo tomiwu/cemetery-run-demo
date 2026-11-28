@@ -17,6 +17,10 @@ interface Window {
       speed: number;
       state: "walking" | "popped" | "arrived";
     }[];
+    /** Zombies popped so far (the score). */
+    score: () => number;
+    /** Put a walking zombie 4 m in front of the hearse. */
+    placeZombieAhead: () => void;
     /** True when the cemetery models are in the game scene. */
     gameLoaded: () => boolean;
     /** Draw calls of the last frame, shadow passes included. */

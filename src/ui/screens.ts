@@ -4,6 +4,8 @@ import { STRINGS } from "../strings";
 export interface Screens {
   /** Show the screen for a session state. Other screens go away. */
   show: (state: SessionState) => void;
+  /** Show the score in the HUD. */
+  setScore: (score: number) => void;
 }
 
 function element<K extends keyof HTMLElementTagNameMap>(
@@ -49,9 +51,25 @@ export function createScreens(
     return screen;
   }
 
+  const hud = element("div", "hud");
+  const scoreText = element("p", "hud-score");
+  hud.append(scoreText);
+  let shownScore = -1;
+  function setScore(score: number): void {
+    if (score !== shownScore) {
+      shownScore = score;
+      scoreText.textContent = `${STRINGS.score} ${String(score)}`;
+    }
+  }
+  setScore(0);
+
   return {
+    setScore,
     show(state) {
       root.replaceChildren();
+      if (state === "playing") {
+        root.append(hud);
+      }
       if (state === "intro") {
         root.append(introScreen());
       } else if (state === "ready") {
