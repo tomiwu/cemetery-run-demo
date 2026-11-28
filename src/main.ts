@@ -1,5 +1,5 @@
 import "./styles.css";
-import { WebGLRenderer, type Camera, type Scene } from "three";
+import { Vector3, WebGLRenderer, type Camera, type Scene } from "three";
 import { CONFIG } from "./config";
 import { blendHearse, type HearseState } from "./logic/hearse";
 import { createInput } from "./logic/input";
@@ -127,6 +127,16 @@ if (query.get("test") === "1") {
     zombies: () => world.zombies.map((zombie) => ({ ...zombie })),
     gameLoaded: () => gameLoaded,
     drawCalls: () => lastDrawCalls,
+    zombiesInView: () => {
+      game.camera.updateMatrixWorld();
+      const point = new Vector3();
+      return world.zombies.filter((zombie) => {
+        point.set(zombie.x, 0.8, zombie.z).project(game.camera);
+        return (
+          Math.abs(point.x) <= 0.95 && Math.abs(point.y) <= 0.95 && point.z < 1
+        );
+      }).length;
+    },
   };
 }
 

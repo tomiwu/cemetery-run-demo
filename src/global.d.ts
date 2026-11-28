@@ -21,5 +21,7 @@ interface Window {
     gameLoaded: () => boolean;
     /** Draw calls of the last frame, shadow passes included. */
     drawCalls: () => number;
+    /** Number of zombies inside the camera frame. */
+    zombiesInView: () => number;
   };
 }

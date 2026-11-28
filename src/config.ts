@@ -108,9 +108,9 @@ export const CONFIG = {
   /** Chase camera. */
   camera: {
     /** Offset from the hearse in metres (about 40 degrees down). The world direction is fixed. */
-    offset: { x: 3, y: 7.5, z: 9.5 },
+    offset: { x: 4.5, y: 8.5, z: 8.5 },
     /** The camera looks at a point this far in front of the hearse (north), so the sky shows. */
-    lookAhead: 5,
+    lookAhead: 6,
     /** Follow speed. A higher value follows closer (1/s). */
     follow: 5,
     /** Smallest vertical view angle in degrees, and the narrowest side view angle. */

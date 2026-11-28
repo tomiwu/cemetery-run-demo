@@ -511,34 +511,34 @@ function addLampPosts(
       z: post.z,
       color: PALETTE.iron,
     });
-    scenery.add(new CylinderGeometry(0.06, 0.09, height, 6), {
+    scenery.add(new CylinderGeometry(0.08, 0.11, height, 6), {
       x: post.x,
       y: height / 2,
       z: post.z,
       color: PALETTE.iron,
     });
-    scenery.add(new BoxGeometry(0.44, 0.07, 0.44), {
+    scenery.add(new BoxGeometry(0.5, 0.08, 0.5), {
       x: post.x,
       y: height,
       z: post.z,
       color: PALETTE.iron,
     });
-    glow.add(new BoxGeometry(0.35, 0.45, 0.35), {
+    glow.add(new BoxGeometry(0.4, 0.55, 0.4), {
       x: post.x,
-      y: height + 0.28,
+      y: height + 0.33,
       z: post.z,
       color: PALETTE.headlight,
     });
-    scenery.add(new ConeGeometry(0.34, 0.24, 4), {
+    scenery.add(new ConeGeometry(0.4, 0.26, 4), {
       x: post.x,
-      y: height + 0.62,
+      y: height + 0.74,
       z: post.z,
       turn: Math.PI / 4,
       color: PALETTE.iron,
     });
     scenery.add(new SphereGeometry(0.04, 5, 4), {
       x: post.x,
-      y: height + 0.78,
+      y: height + 0.9,
       z: post.z,
       color: PALETTE.iron,
     });
@@ -563,6 +563,8 @@ export function buildBuildings(map: CemeteryMap): Buildings {
     chapelScenery.build(),
     new MeshStandardMaterial({
       vertexColors: true,
+      // Lower albedo: the headlight and door light must not turn the brick bright orange.
+      color: "#9C9C9C",
       roughness: 0.95,
       flatShading: true,
     }),
@@ -610,7 +612,7 @@ export function buildBuildings(map: CemeteryMap): Buildings {
 
   const lights: PointLight[] = [];
   for (const side of [-1, 1]) {
-    const light = new PointLight(PALETTE.candle, 7, 12, 2);
+    const light = new PointLight(PALETTE.candle, 5, 12, 2);
     light.position.set(map.chapel.x + side * 2.4, 1.8, doorZ + 1.6);
     lights.push(light);
   }

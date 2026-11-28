@@ -210,6 +210,19 @@ export function createGameScene(
         paint.roughness = 0.25;
         paint.color.set(PALETTE.hearseBody);
       }
+      // The windows, the chrome line and the curtains must read in the dusk light.
+      const material = object.material as MeshStandardMaterial;
+      if (object.name === "window") {
+        material.envMapIntensity = 4;
+        material.emissive.set("#1C1E22");
+        material.emissiveIntensity = 0.6;
+      } else if (object.name === "chrome") {
+        material.envMapIntensity = 3;
+        material.emissive.set("#5A5A5A");
+      } else if (object.name === "curtain") {
+        material.emissive.set("#E8E0CF");
+        material.emissiveIntensity = 0.3;
+      }
     }
   });
   scene.add(hearse.group);

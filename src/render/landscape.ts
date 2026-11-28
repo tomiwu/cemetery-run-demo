@@ -10,8 +10,8 @@ import { PALETTE } from "./palette";
  */
 
 /** The path is this much narrower than the road rectangle on each side, and its edge is soft. */
-const PATH_INSET = 1;
-const PATH_SOFT_EDGE = 0.6;
+const PATH_INSET = 1.25;
+const PATH_SOFT_EDGE = 0.5;
 
 /** Distance from a point to a rectangle (0 inside). */
 function distanceToRect(x: number, z: number, area: Rect): number {
@@ -47,7 +47,7 @@ export function pathColor(k: number): Color {
   // A little extra warmth: the cool sky light would make the dirt look grey.
   return mixColor(PALETTE.pathDirt, PALETTE.pathDirtLight, k).lerp(
     new Color(PALETTE.pathDirtWarm),
-    0.12,
+    0.22,
   );
 }
 

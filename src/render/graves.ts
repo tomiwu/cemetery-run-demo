@@ -101,7 +101,7 @@ function addStone(
 
   if (kind === "round" || kind === "bevel") {
     const width = kind === "round" ? 0.62 : 0.78;
-    const height = kind === "round" ? 1.0 : 0.88;
+    const height = kind === "round" ? 1.15 : 1.05;
     const straight = height - width / 2;
     part(
       new BoxGeometry(width, straight, 0.14),
@@ -301,12 +301,13 @@ export function pathEdgeProps(
       const kind = random();
       const zz = z + (random() - 0.5) * 0.8;
       if (kind < 0.4) {
-        batch.add(new BoxGeometry(0.34, 0.2, 0.26), {
+        batch.add(new IcosahedronGeometry(0.2, 0), {
           x,
-          y: 0.1,
+          y: 0.07,
           z: zz,
+          scale: [1.3, 0.55, 1],
           turn: random() * Math.PI,
-          color: mixColor(PALETTE.stoneGrey, PALETTE.stoneBase, random()),
+          color: mixColor("#8A877F", "#7C7971", random()),
         });
       } else if (kind < 0.85) {
         const colour =

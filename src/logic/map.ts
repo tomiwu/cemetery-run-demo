@@ -269,7 +269,8 @@ export function buildMap(cfg: MapConfig): CemeteryMap {
 
   // Spawn points: the free places in the gaps between the graves, spread over both fields.
   const candidates: Vec[] = [];
-  for (let row = 0; row < g.rows; row += 1) {
+  // Zombies start in the near and middle rows (the south part), so several are in view.
+  for (let row = Math.floor(g.rows / 3); row < g.rows; row += 1) {
     const z = rowZ(row) + g.rowSpacing / 2;
     for (const side of [-1, 1]) {
       for (let k = -1; k <= 2 * g.columns - 2; k += 1) {
